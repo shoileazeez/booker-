@@ -1,64 +1,213 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from './AuthContext';
+import { api } from '../api/client';
 
 const WorkspaceContext = createContext();
+const WORKSPACE_STORAGE_KEY = '@booker:currentWorkspace';
+const OFFLINE_QUEUE_KEY = '@booker:queuedActions';
+const LAST_SYNC_STORAGE_KEY = '@booker:lastSyncAt';
+
+const generateId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 export const WorkspaceProvider = function({ children }) {
-  const workspacesState = useState([
-    { id: '1', name: 'Main Warehouse', createdBy: 'admin1' },
-    { id: '2', name: 'Branch Office', createdBy: 'admin1' }
-  ]);
-  const workspaces = workspacesState[0];
-  const setWorkspaces = workspacesState[1];
+  const { token } = useAuth();
 
-  const currentWorkspaceState = useState('1');
-  const currentWorkspaceId = currentWorkspaceState[0];
-  const setCurrentWorkspaceId = currentWorkspaceState[1];
+  const [workspaces, setWorkspaces] = useState([]);
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [pendingActions, setPendingActions] = useState([]);
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-  const currentUserState = useState('user1');
-  const currentUser = currentUserState[0];
-  const setCurrentUser = currentUserState[1];
-
-  const userRolesState = useState({
-    user1: { '1': 'admin', '2': 'branch_manager' },
-    user2: { '1': 'branch_manager', '2': 'branch_manager' }
-  });
-  const userRoles = userRolesState[0];
-  const setUserRoles = userRolesState[1];
-
-  const getCurrentUserRole = useCallback(function() {
-    if (userRoles[currentUser] && userRoles[currentUser][currentWorkspaceId]) {
-      return userRoles[currentUser][currentWorkspaceId];
+  const persistWorkspaceId = async (id) => {
+    try {
+      await AsyncStorage.setItem(WORKSPACE_STORAGE_KEY, id || '');
+    } catch (err) {
+      // ignore
     }
-    return 'viewer';
-  }, [userRoles, currentUser, currentWorkspaceId]);
+  };
 
-  const isAdmin = useCallback(function() {
-    return getCurrentUserRole() === 'admin';
-  }, [getCurrentUserRole]);
+  const loadStoredWorkspaceId = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(WORKSPACE_STORAGE_KEY);
+      if (stored) {
+        setCurrentWorkspaceId(stored);
+      }
+    } catch (err) {
+      // ignore
+    }
+  };
 
-  const isBranchManager = useCallback(function() {
-    return getCurrentUserRole() === 'branch_manager';
-  }, [getCurrentUserRole]);
+  const persistPendingActions = async (actions) => {
+    try {
+      await AsyncStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(actions || []));
+    } catch (err) {
+      // ignore
+    }
+  };
 
-  const value = useMemo(function() {
-    return {
-      workspaces: workspaces,
-      setWorkspaces: setWorkspaces,
-      currentWorkspaceId: currentWorkspaceId,
-      setCurrentWorkspaceId: setCurrentWorkspaceId,
-      currentUser: currentUser,
-      setCurrentUser: setCurrentUser,
-      userRoles: userRoles,
-      setUserRoles: setUserRoles,
-      getCurrentUserRole: getCurrentUserRole,
-      isAdmin: isAdmin,
-      isBranchManager: isBranchManager
-    };
-  }, [workspaces, currentWorkspaceId, currentUser, userRoles, getCurrentUserRole, isAdmin, isBranchManager]);
+  const persistLastSyncedAt = async (date) => {
+    try {
+      await AsyncStorage.setItem(LAST_SYNC_STORAGE_KEY, String(date?.getTime() ?? ''));
+    } catch (err) {
+        setPendingActions(JSON.parse(stored));
+      }
 
-  return React.createElement(WorkspaceContext.Provider, { value: value }, children);
+      const lastSync = await AsyncStorage.getItem(LAST_SYNC_STORAGE_KEY);
+      if (lastSync) {
+        setLastSyncedAt(new Date(parseInt(lastSync, 10)
+    try {
+      const stored = await AsyncStorage.getItem(OFFLINE_QUEUE_KEY);
+      if (stored) {
+      const lastSync = await AsyncStorage.getItem(LAST_SYNC_STORAGE_KEY);
+      if (lastSync) {
+        setLastSyncedAt(new Date(parseInt(lastSync, 10)));
+      }
+        setPendingActions(JSON.parse(stored));
+      }
+    } catch (err) {
+      // ignore
+    }
+  };
+
+  const enqueueOfflineAction = async (action) => {
+    const queued = { id: generateId(), createdAt: Date.now(), ...action };
+    setPendingActions((prev) => {
+      const next = [...prev, queued];
+      persistPendingActions(next);
+      return next;
+    });
+  };
+
+  const processPendingActions = useCallback(async () => {
+    if (!token || !currentWorkspaceId || pendingActions.length === 0) {
+      return;
+    }
+
+    setIsSyncing(true);
+    const remaining = [];
+
+    for (const action of pendingActions) {
+      try {
+        if (action.method === 'post') {
+          await api.post(action.path, action.body);
+        } else if (action.method === 'put') {
+          await api.put(action.path, action.body);
+        } else if (action.method === 'delete') {
+
+    const now = new Date();
+    setLastSyncedAt(now);
+    persistLastSyncedAt(now);
+
+          await api.delete(action.path);
+    const now = new Date();
+    setLastSyncedAt(now);
+    persistLastSyncedAt(now);
+        }
+      } catch (err) {
+        remaining.push(action);
+      }
+    }
+
+    setPendingActions(remaining);
+    persistPendingActions(remaining);
+    setIsSyncing(false);
+  }, [currentWorkspaceId, pendingActions, token]);
+
+  const queueAction = async (action) => {
+    await enqueueOfflineAction(action);
+    processPendingActions();
+  };
+
+  conslastSyncedAt,
+      queueAction,
+      processPendingActions,
+    }),
+    [pendingActions.length, isSyncing, syncStatus, lastSyncedAt
+  }, [lastSyncedAt,
+      queueAction,
+      processPendingActions,
+    }),
+    [pendingActions.length, isSyncing, syncStatus, lastSyncedAt
+      pendingCount: pendingActions.length,
+      isSyncing,
+      status: syncStatus,
+      queueAction,
+      processPendingActions,
+    }),
+    [pendingActions.length, isSyncing, syncStatus, processPendingActions],
+  );
+
+  const loadWorkspaces = useCallback(async () => {
+    if (!token) {
+      setWorkspaces([]);
+      setCurrentWorkspaceId(null);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const data = await api.get('/workspaces');
+      const list = Array.isArray(data) ? data : [];
+      setWorkspaces(list);
+
+      if (list.length === 0) {
+        setCurrentWorkspaceId(null);
+        return;
+      }
+
+      setCurrentWorkspaceId((prev) => {
+        if (prev && list.some((w) => w.id === prev)) {
+          return prev;
+        }
+        return list[0].id;
+      });
+    } catch (err) {
+      setWorkspaces([]);
+      setCurrentWorkspaceId(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadStoredWorkspaceId();
+    loadPendingActions();
+  }, []);
+
+  useEffect(() => {
+    loadWorkspaces();
+  }, [loadWorkspaces]);
+
+  useEffect(() => {
+    // Attempt to sync queued work whenever the auth token or workspace changes
+    if (token && currentWorkspaceId) {
+      processPendingActions();
+    }
+  }, [token, currentWorkspaceId, processPendingActions]);
+
+  useEffect(() => {
+    persistWorkspaceId(currentWorkspaceId);
+  }, [currentWorkspaceId]);
+
+  const value = useMemo(
+    () => ({
+      workspaces,
+      setWorkspaces,
+      currentWorkspaceId,
+      setCurrentWorkspaceId,
+      loading,
+      syncInfo,
+    }),
+    [workspaces, currentWorkspaceId, loading, syncInfo],
+  );
+
+  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 };
 
-export const useWorkspace = function() { return useContext(WorkspaceContext); };
+export const useWorkspace = function() {
+  return useContext(WorkspaceContext);
+};
 
 export default WorkspaceContext;

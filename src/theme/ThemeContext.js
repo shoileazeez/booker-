@@ -3,12 +3,12 @@ import { Appearance } from 'react-native';
 
 const ThemeContext = createContext();
 
-const primaryColor = '#2E86AB';
-const accentColor = '#F39C12';
-const backgroundColor = '#F8FAFC';
+const primaryColor = '#00A676';
+const accentColor = '#FBBF24';
+const backgroundColor = '#F3F7F5';
 const cardColor = '#FFFFFF';
-const textPrimary = '#1E293B';
-const textSecondary = '#64748B';
+const textPrimary = '#0F172A';
+const textSecondary = '#475569';
 const designStyle = 'modern';
 
 export const ThemeProvider = ({ children }) => {

@@ -11,15 +11,19 @@
       "resizeMode": "contain",
       "backgroundColor": "#1a73e8"
     },
-    "platforms": ["ios", "android"],
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "scheme": "bookerapp",
     "sdkVersion": "49.0.0",
     "runtimeVersion": "1.0.0",
     "updates": {
-      "fallbackToCacheOnError": true,
-      "url": "https://u.expo.dev/your-project-id"
+      "fallbackToCacheOnError": true
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "android": {
       "package": "com.bookerapp.inventory",
       "versionCode": 1,
@@ -31,8 +35,7 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
       ],
-      "useNextNotificationFormat": true,
-      "googleServicesFile": "./google-services.json"
+      "useNextNotificationFormat": true
     },
     "ios": {
       "supportsTabletMode": true,
@@ -40,7 +43,9 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "Camera is used to capture inventory photos",
-        "UIRequiredDeviceCapabilities": ["armv7"]
+        "UIRequiredDeviceCapabilities": [
+          "armv7"
+        ]
       },
       "associatedDomains": []
     },
@@ -51,11 +56,10 @@
     "privacy": "https://example.com/privacy",
     "primaryColor": "#1a73e8",
     "backgroundColor": "#ffffff",
-    "owner": "your-username",
     "plugins": [],
     "extra": {
       "eas": {
-        "projectId": "your-project-id-here"
+        "projectId": "595d2e24-df5b-4d3b-b308-7c45a082711b"
       }
     }
   }

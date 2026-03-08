@@ -1,4 +1,4 @@
-import React, { useState, useContext, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -14,19 +14,23 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { api } from '../api/client';
 
 const AddItemScreen = function() {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const workspace = useWorkspace();
+  const { currentWorkspaceId, syncInfo } = useWorkspace();
 
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState('1');
+  const [costPrice, setCostPrice] = useState('0');
+  const [sellingPrice, setSellingPrice] = useState('0');
   const [category, setCategory] = useState('');
   const [location, setLocation] = useState('');
   const [minStock, setMinStock] = useState('1');
+  const [loading, setLoading] = useState(false);
 
-  const handleAddItem = function() {
+  const handleAddItem = async function() {
     if (!name.trim() || !category.trim() || !location.trim()) {
       Platform.OS === 'web'
         ? window.alert('Please fill in all required fields')
@@ -34,25 +38,55 @@ const AddItemScreen = function() {
       return;
     }
 
-    const newItem = {
-      id: Date.now().toString(),
+    if (!currentWorkspaceId) {
+      Platform.OS === 'web'
+        ? window.alert('Please select a workspace first')
+        : Alert.alert('Error', 'Please select a workspace first');
+      return;
+    }
+
+    const payload = {
       name: name.trim(),
-      quantity: parseInt(quantity) || 1,
+      quantity: parseFloat(quantity) || 1,
+      costPrice: parseFloat(costPrice) || 0,
+      sellingPrice: parseFloat(sellingPrice) || 0,
+      reorderLevel: parseFloat(minStock) || 1,
       category: category.trim(),
       location: location.trim(),
-      minStock: parseInt(minStock) || 1,
-      workspaceId: workspace.currentWorkspaceId
     };
 
-    Platform.OS === 'web'
-      ? window.alert('Item added successfully!')
-      : Alert.alert('Success', 'Item added successfully!');
+    setLoading(true);
 
-    setName('');
-    setQuantity('1');
-    setCategory('');
-    setLocation('');
-    setMinStock('1');
+    try {
+      await api.post(`/workspaces/${currentWorkspaceId}/inventory`, payload);
+
+      Platform.OS === 'web'
+        ? window.alert('Item added successfully!')
+        : Alert.alert('Success', 'Item added successfully!');
+
+      setName('');
+      setQuantity('1');
+      setCostPrice('0');
+      setSellingPrice('0');
+      setCategory('');
+      setLocation('');
+      setMinStock('1');
+    } catch (err) {
+      if (syncInfo?.queueAction) {
+        await syncInfo.queueAction({
+          method: 'post',
+          path: `/workspaces/${currentWorkspaceId}/inventory`,
+          body: payload,
+        });
+        Platform.OS === 'web'
+          ? window.alert('Item queued and will sync once online')
+          : Alert.alert('Offline', 'Item queued and will sync once online');
+      } else {
+        Alert.alert('Error', err?.message || 'Unable to add item');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -141,6 +175,60 @@ const AddItemScreen = function() {
                     { color: theme.colors.textPrimary }
                   ]}
                 >
+                  Cost Price
+                </Text>
+                <TextInput
+                  style={[
+                    styles.textInput,
+                    {
+                      backgroundColor: theme.colors.background,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.textPrimary
+                    }
+                  ]}
+                  placeholder="0.00"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={costPrice}
+                  onChangeText={setCostPrice}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            </View>
+
+            <View style={styles.formRow}>
+              <View style={styles.formFieldHalf}>
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { color: theme.colors.textPrimary }
+                  ]}
+                >
+                  Selling Price
+                </Text>
+                <TextInput
+                  style={[
+                    styles.textInput,
+                    {
+                      backgroundColor: theme.colors.background,
+                      borderColor: theme.colors.border,
+                      color: theme.colors.textPrimary
+                    }
+                  ]}
+                  placeholder="0.00"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={sellingPrice}
+                  onChangeText={setSellingPrice}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+
+              <View style={styles.formFieldHalf}>
+                <Text
+                  style={[
+                    styles.fieldLabel,
+                    { color: theme.colors.textPrimary }
+                  ]}
+                >
                   Min Stock
                 </Text>
                 <TextInput
@@ -206,11 +294,12 @@ const AddItemScreen = function() {
             </View>
 
             <TouchableOpacity
-              style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
+              style={[styles.addButton, { backgroundColor: theme.colors.primary, opacity: loading ? 0.7 : 1 }]}
               onPress={handleAddItem}
+              disabled={loading}
             >
               <MaterialIcons name="add" size={20} color="#FFFFFF" />
-              <Text style={styles.addButtonText}>Add Item</Text>
+              <Text style={styles.addButtonText}>{loading ? 'Adding…' : 'Add Item'}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>

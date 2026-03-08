@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,63 +13,65 @@ import {
   FlatList,
   Image
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { api } from '../api/client';
+import { cacheInventory, getCachedInventory } from '../storage/offlineStore';
+import { cacheInventory, getCachedInventory } from '../storage/offlineStore';
 
-const HomeScreen = function() {
+const HomeScreen = function({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const workspace = useWorkspace();
+  const { currentWorkspaceId, syncInfo } = useWorkspace();
 
-  const [items, setItems] = useState([
-    {
-      id: '1',
-      name: 'Office Chair',
-      quantity: 5,
-      category: 'Furniture',
-      location: 'Office',
-      minStock: 2,
-      workspaceId: '1'
-    },
-    {
-      id: '2',
-      name: 'Printer Paper',
-      quantity: 1,
-      category: 'Supplies',
-      location: 'Storage',
-      minStock: 5,
-      workspaceId: '1'
-    },
-    {
-      id: '3',
-      name: 'USB Cables',
-      quantity: 15,
-      category: 'Electronics',
-      location: 'Tech Room',
-      minStock: 3,
-      workspaceId: '1'
-    },
-    {
-      id: '4',
-      name: 'Desk Lamp',
-      quantity: 8,
-      category: 'Furniture',
-      location: 'Branch Office',
-      minStock: 2,
-      workspaceId: '2'
-    }
-  ]);
-
-  const [searchText, setSearchText] = useState('');
-  const [filterCategory, setFilterCategory] = useState('All');
+  const [items, setItems] = useState([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [error, setError] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [newQuantity, setNewQuantity] = useState('');
 
+  const loadItems = useCallback(async () => {
+    if (!currentWorkspaceId) {
+      setItems([]);
+      return;
+    }
+
+    setLoadingItems(true);
+    setError(null);
+
+    try {
+      const data = await api.get(`/workspaces/${currentWorkspaceId}/inventory`);
+      const list = Array.isArray(data) ? data : [];
+      setItems(list);
+      cacheInventory(currentWorkspaceId, list);
+    } catch (err) {
+      const cached = await getCachedInventory(currentWorkspaceId);
+      if (cached && cached.length > 0) {
+        setItems(cached);
+        setError('Offline mode: showing last known inventory');
+      } else {
+        setError(err?.message || 'Unable to load inventory items');
+      }
+    } finally {
+      setLoadingItems(false);
+    }
+  }, [currentWorkspaceId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadItems();
+    }, [loadItems]),
+  );
+
+  const [searchText, setSearchText] = useState('');
+  const [filterCategory, setFilterCategory] = useState('All');
+
   const filteredItems = useMemo(function() {
     return items.filter(function(item) {
-      const matchesWorkspace = item.workspaceId === workspace.currentWorkspaceId;
+      const matchesWorkspace = item.workspaceId === currentWorkspaceId;
       const matchesSearch =
         item.name.toLowerCase().includes(searchText.toLowerCase()) ||
         item.category.toLowerCase().includes(searchText.toLowerCase());
@@ -83,7 +85,7 @@ const HomeScreen = function() {
     const categorySet = {};
     items
       .filter(function(item) {
-        return item.workspaceId === workspace.currentWorkspaceId;
+        return item.workspaceId === currentWorkspaceId;
       })
       .forEach(function(item) {
         categorySet[item.category] = true;
@@ -91,43 +93,99 @@ const HomeScreen = function() {
     return ['All'].concat(Object.keys(categorySet));
   }, [items, workspace.currentWorkspaceId]);
 
-  const handleUpdateQuantity = function(itemId, qty) {
+  const handleUpdateQuantity = async function(itemId, qty) {
     if (qty < 0) return;
 
-    setItems(function(prevItems) {
-      return prevItems.map(function(item) {
-        if (item.id === itemId) {
-          return {
-            id: item.id,
-            name: item.name,
-            quantity: qty,
-            category: item.category,
-            location: item.location,
-            minStock: item.minStock,
-            workspaceId: item.workspaceId
-          };
-        }
-        return item;
+    if (!currentWorkspaceId) return;
+
+    try {
+      await api.put(
+        `/workspaces/${currentWorkspaceId}/inventory/${itemId}`,
+        { quantity: qty }
+      );
+
+      setItems(function(prevItems) {
+        const next = prevItems.map(function(item) {
+          if (item.id === itemId) {
+            return { ...item, quantity: qty };
+          }
+          return item;
+        });
+        cacheInventory(currentWorkspaceId, next);
+        return next;
       });
-    });
 
-    var item = items.find(function(i) {
-      return i.id === itemId;
-    });
-    if (item && qty < item.minStock) {
-      Platform.OS === 'web'
-        ? window.alert(
-            'Low stock alert: ' +
-              item.name +
-              ' is below minimum threshold!'
-          )
-        : Alert.alert(
-            'Low Stock Alert',
-            item.name + ' is below minimum threshold!'
-          );
+      var item = items.find(function(i) {
+        return i.id === itemId;
+      });
+      if (item && qty < item.minStock) {
+        Platform.OS === 'web'
+          ? window.alert(
+              'Low stock alert: ' +
+                item.name +
+                ' is below minimum threshold!'
+            )
+          : Alert.alert(
+              'Low Stock Alert',
+              item.name + ' is below minimum threshold!'
+            );
+      }
+    } catch (err) {
+      if (syncInfo?.queueAction) {
+        await syncInfo.queueAction({
+          method: 'put',
+          path: `/workspaces/${currentWorkspaceId}/inventory/${itemId}`,
+          body: { quantity: qty },
+        });
+        Alert.alert('Offline', 'Update queued and will sync once online');
+      } else {
+        Alert.alert('Error', err?.message || 'Unable to update item');
+      }
+    } finally {
+      setShowUpdateModal(false);
     }
+  };
 
-    setShowUpdateModal(false);
+  const handleDeleteItem = async (itemId) => {
+    if (!currentWorkspaceId) return;
+
+    Alert.alert('Delete item', 'Are you sure you want to delete this item?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.delete(
+              `/workspaces/${currentWorkspaceId}/inventory/${itemId}`
+            );
+            setItems((prev) => {
+              const next = prev.filter((item) => item.id !== itemId);
+              cacheInventory(currentWorkspaceId, next);
+              return next;
+            });
+          } catch (err) {
+            if (syncInfo?.queueAction) {
+              await syncInfo.queueAction({
+                method: 'delete',
+                path: `/workspaces/${currentWorkspaceId}/inventory/${itemId}`,
+              });
+              Alert.alert('Offline', 'Delete queued and will sync once online');
+            } else {
+              Alert.alert('Error', err?.message || 'Unable to delete item');
+            }
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleEditItem = (item) => {
+    navigation.navigate('EditItem', { item });
+  };
+
+  const handleAddItem = () => {
+    navigation.navigate('AddItem');
   };
 
   const handleOpenUpdateModal = function(item) {
@@ -155,13 +213,27 @@ const HomeScreen = function() {
                 { color: theme.colors.textSecondary }
               ]}
             >
-              {filteredItems.length} items in inventory
+              {loadingItems ? 'Loading items...' : `${filteredItems.length} items in inventory`}
             </Text>
+            {error ? (
+              <Text style={[styles.errorText, { color: theme.colors.danger || '#d32f2f' }]}> 
+                {error}
+              </Text>
+            ) : null}
           </View>
-          <Image
-            source={{ uri: 'IMAGE:warehouse-storage-boxes' }}
-            style={styles.headerImage}
-          />
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={handleAddItem}
+            >
+              <MaterialIcons name="add" size={20} color={theme.colors.primary} />
+              <Text style={[styles.addButtonText, { color: theme.colors.primary }]}>Add</Text>
+            </TouchableOpacity>
+            <Image
+              source={{ uri: 'IMAGE:warehouse-storage-boxes' }}
+              style={styles.headerImage}
+            />
+          </View>
         </View>
       </View>
 
@@ -270,20 +342,38 @@ const HomeScreen = function() {
                     </Text>
                   </View>
                 </View>
-                {isLowStock ? (
-                  <View
-                    style={[
-                      styles.lowStockBadge,
-                      { backgroundColor: theme.colors.error }
-                    ]}
+                <View style={styles.itemActions}>
+                  <TouchableOpacity
+                    onPress={function() {
+                      handleEditItem(item);
+                    }}
+                    style={styles.actionButton}
                   >
-                    <MaterialIcons
-                      name="warning"
-                      size={16}
-                      color="#FFFFFF"
-                    />
-                  </View>
-                ) : null}
+                    <MaterialIcons name="edit" size={18} color={theme.colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={function() {
+                      handleDeleteItem(item.id);
+                    }}
+                    style={styles.actionButton}
+                  >
+                    <MaterialIcons name="delete" size={18} color={theme.colors.error} />
+                  </TouchableOpacity>
+                  {isLowStock ? (
+                    <View
+                      style={[
+                        styles.lowStockBadge,
+                        { backgroundColor: theme.colors.error }
+                      ]}
+                    >
+                      <MaterialIcons
+                        name="warning"
+                        size={16}
+                        color="#FFFFFF"
+                      />
+                    </View>
+                  ) : null}
+                </View>
               </View>
               <View style={styles.quantitySection}>
                 <Text
@@ -492,11 +582,32 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 16
   },
+  errorText: {
+    marginTop: 4,
+    fontSize: 12
+  },
   headerImage: {
     width: 80,
     height: 80,
     borderRadius: 12,
     marginLeft: 16
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    marginRight: 10
+  },
+  addButtonText: {
+    marginLeft: 6,
+    fontWeight: '600'
   },
   searchContainer: {
     paddingHorizontal: 20,
@@ -552,6 +663,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 12
+  },
+  itemActions: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  actionButton: {
+    padding: 6,
+    marginLeft: 6,
+    borderRadius: 6
   },
   itemInfo: {
     flex: 1

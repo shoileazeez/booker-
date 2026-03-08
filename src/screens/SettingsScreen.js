@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,22 +6,25 @@ import {
   ScrollView,
   TouchableOpacity,
   Modal,
-  Alert,
   Platform,
   StatusBar
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { useAuth } from '../context/AuthContext';
 
-const SettingsScreen = function() {
+const SettingsScreen = function({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
   const workspace = useWorkspace();
+  const { user, logout } = useAuth();
 
-  const [showRoleModal, setShowRoleModal] = useState(false);
-  const users = ['user1', 'user2'];
-  const isAdmin = workspace.isAdmin();
+  const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
+
+  const currentWorkspace = workspace.workspaces.find((w) => w.id === workspace.currentWorkspaceId);
+  const userRole = user?.role || 'User';
+  const canCreateWorkspace = userRole === 'super_admin' || userRole === 'admin';
 
   return (
     <ScrollView
@@ -133,6 +136,92 @@ const SettingsScreen = function() {
         <View style={styles.settingItem}>
           <View style={styles.settingInfo}>
             <MaterialIcons
+              name="business"
+              size={24}
+              color={theme.colors.primary}
+            />
+            <View style={styles.settingText}>
+              <Text
+                style={[
+                  styles.settingTitle,
+                  { color: theme.colors.textPrimary }
+                ]}
+              >
+                Current Workspace
+              </Text>
+              <Text
+                style={[
+                  styles.settingDescription,
+                  { color: theme.colors.textSecondary }
+                ]}
+              >
+                {currentWorkspace?.name}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={function() {
+              setShowWorkspaceModal(true);
+            }}
+          >
+            <MaterialIcons
+              name="chevron-right"
+              size={24}
+              color={theme.colors.textSecondary}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {canCreateWorkspace && (
+          <View
+            style={[styles.settingItem, { borderBottomWidth: 0 }]}
+          >
+            <View style={styles.settingInfo}>
+              <MaterialIcons
+                name="add-location-alt"
+                size={24}
+                color={theme.colors.primary}
+              />
+              <View style={styles.settingText}>
+                <Text
+                  style={[
+                    styles.settingTitle,
+                    { color: theme.colors.textPrimary }
+                  ]}
+                >
+                  Create Branch
+                </Text>
+                <Text
+                  style={[
+                    styles.settingDescription,
+                    { color: theme.colors.textSecondary }
+                  ]}
+                >
+                  Add new branch to workspace
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={function() {
+                navigation.navigate('CreateBranch');
+              }}
+            >
+              <MaterialIcons
+                name="add-circle"
+                size={24}
+                color={theme.colors.primary}
+              />
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      <View
+        style={[styles.settingsCard, { backgroundColor: theme.colors.card }]}
+      >
+        <View style={styles.settingItem}>
+          <View style={styles.settingInfo}>
+            <MaterialIcons
               name="account-circle"
               size={24}
               color={theme.colors.primary}
@@ -152,238 +241,134 @@ const SettingsScreen = function() {
                   { color: theme.colors.textSecondary }
                 ]}
               >
-                {workspace.getCurrentUserRole()}
+                {userRole}
               </Text>
             </View>
           </View>
         </View>
-
-        {isAdmin ? (
-          <View
-            style={[styles.settingItem, { borderBottomWidth: 0 }]}
-          >
-            <View style={styles.settingInfo}>
-              <MaterialIcons
-                name="security"
-                size={24}
-                color={theme.colors.primary}
-              />
-              <View style={styles.settingText}>
-                <Text
-                  style={[
-                    styles.settingTitle,
-                    { color: theme.colors.textPrimary }
-                  ]}
-                >
-                  Manage Roles
-                </Text>
-                <Text
-                  style={[
-                    styles.settingDescription,
-                    { color: theme.colors.textSecondary }
-                  ]}
-                >
-                  Assign roles to users
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              onPress={function() {
-                setShowRoleModal(true);
-              }}
-            >
-              <MaterialIcons
-                name="chevron-right"
-                size={24}
-                color={theme.colors.textSecondary}
-              />
-            </TouchableOpacity>
-          </View>
-        ) : null}
       </View>
 
-      {isAdmin ? (
-        <Modal
-          visible={showRoleModal}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={function() {
-            setShowRoleModal(false);
-          }}
-        >
-          <View style={styles.modalOverlay}>
-            <View
-              style={[
-                styles.modalContent,
-                {
-                  backgroundColor: theme.colors.card,
-                  maxHeight: '80%'
-                }
-              ]}
-            >
-              <View style={styles.modalHeader}>
-                <Text
-                  style={[
-                    styles.modalTitle,
-                    { color: theme.colors.textPrimary }
-                  ]}
-                >
-                  Assign Roles
-                </Text>
-                <TouchableOpacity
-                  onPress={function() {
-                    setShowRoleModal(false);
-                  }}
-                >
-                  <MaterialIcons
-                    name="close"
-                    size={24}
-                    color={theme.colors.textSecondary}
-                  />
-                </TouchableOpacity>
-              </View>
+      {/* Workspace Switcher Modal */}
+      <Modal
+        visible={showWorkspaceModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={function() {
+          setShowWorkspaceModal(false);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              {
+                backgroundColor: theme.colors.card,
+                maxHeight: '80%'
+              }
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Text
+                style={[
+                  styles.modalTitle,
+                  { color: theme.colors.textPrimary }
+                ]}
+              >
+                Switch Workspace
+              </Text>
+              <TouchableOpacity
+                onPress={function() {
+                  setShowWorkspaceModal(false);
+                }}
+              >
+                <MaterialIcons
+                  name="close"
+                  size={24}
+                  color={theme.colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
 
-              <ScrollView style={styles.modalBody}>
-                {users.map(function(user) {
-                  var isCurrentUser = user === workspace.currentUser;
-                  var userRoleInWorkspace =
-                    workspace.userRoles[user] &&
-                    workspace.userRoles[user][workspace.currentWorkspaceId]
-                      ? workspace.userRoles[user][
-                          workspace.currentWorkspaceId
-                        ]
-                      : 'viewer';
+            <ScrollView style={styles.modalBody}>
+              {workspace.workspaces.map(function(ws) {
+                const isCurrentWorkspace = ws.id === workspace.currentWorkspaceId;
+                const roleLabel = userRole;
 
-                  return (
-                    <View
-                      key={user}
-                      style={[
-                        styles.roleAssignmentItem,
-                        { borderColor: theme.colors.border }
-                      ]}
-                    >
-                      <View>
-                        <Text
-                          style={[
-                            styles.roleAssignmentUserName,
-                            { color: theme.colors.textPrimary }
-                          ]}
-                        >
-                          {user}
-                          {isCurrentUser ? ' (You)' : ''}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.roleAssignmentCurrentRole,
-                            { color: theme.colors.textSecondary }
-                          ]}
-                        >
-                          Current: {userRoleInWorkspace}
-                        </Text>
-                      </View>
-
-                      <View style={styles.roleAssignmentActions}>
-                        <TouchableOpacity
-                          style={[
-                            styles.roleButton,
-                            {
-                              backgroundColor:
-                                userRoleInWorkspace === 'admin'
-                                  ? theme.colors.primary
-                                  : theme.colors.border
-                            }
-                          ]}
-                          onPress={function() {
-                            var newRoles = Object.assign(
-                              {},
-                              workspace.userRoles
-                            );
-                            newRoles[user] = Object.assign(
-                              {},
-                              newRoles[user] || {}
-                            );
-                            newRoles[user][workspace.currentWorkspaceId] =
-                              'admin';
-                            workspace.setUserRoles(newRoles);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.roleButtonText,
-                              {
-                                color:
-                                  userRoleInWorkspace === 'admin'
-                                    ? '#FFFFFF'
-                                    : theme.colors.textPrimary
-                              }
-                            ]}
-                          >
-                            Admin
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={[
-                            styles.roleButton,
-                            {
-                              backgroundColor:
-                                userRoleInWorkspace === 'branch_manager'
-                                  ? theme.colors.primary
-                                  : theme.colors.border
-                            }
-                          ]}
-                          onPress={function() {
-                            var newRoles = Object.assign(
-                              {},
-                              workspace.userRoles
-                            );
-                            newRoles[user] = Object.assign(
-                              {},
-                              newRoles[user] || {}
-                            );
-                            newRoles[user][workspace.currentWorkspaceId] =
-                              'branch_manager';
-                            workspace.setUserRoles(newRoles);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.roleButtonText,
-                              {
-                                color:
-                                  userRoleInWorkspace === 'branch_manager'
-                                    ? '#FFFFFF'
-                                    : theme.colors.textPrimary
-                              }
-                            ]}
-                          >
-                            Manager
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
+                return (
+                  <TouchableOpacity
+                    key={ws.id}
+                    style={[
+                      styles.workspaceItem,
+                      {
+                        backgroundColor: isCurrentWorkspace ? theme.colors.primary + '20' : 'transparent',
+                        borderColor: isCurrentWorkspace ? theme.colors.primary : theme.colors.border
+                      }
+                    ]}
+                    onPress={function() {
+                      workspace.setCurrentWorkspaceId(ws.id);
+                      setShowWorkspaceModal(false);
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.roleAssignmentUserName,
+                          { color: theme.colors.textPrimary }
+                        ]}
+                      >
+                        {ws.name}
+                        {isCurrentWorkspace ? ' ✓' : ''}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.roleAssignmentCurrentRole,
+                          { color: theme.colors.textSecondary }
+                        ]}
+                      >
+                        Role: {roleLabel}
+                      </Text>
                     </View>
-                  );
-                })}
-              </ScrollView>
+                    {isCurrentWorkspace && (
+                      <MaterialIcons
+                        name="check-circle"
+                        size={20}
+                        color={theme.colors.primary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
 
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[
-                    styles.modalButton,
-                    styles.updateButton,
-                    { backgroundColor: theme.colors.primary }
-                  ]}
-                  onPress={function() {
-                    setShowRoleModal(false);
-                  }}
-                >
-                  <Text style={styles.updateButtonText}>Done</Text>
-                </TouchableOpacity>
-              </View>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.updateButton,
+                  { backgroundColor: theme.colors.primary }
+                ]}
+                onPress={function() {
+                  setShowWorkspaceModal(false);
+                }}
+              >
+                <Text style={styles.updateButtonText}>Done</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </Modal>
-      ) : null}
+        </View>
+      </Modal>
+
+      <View
+        style={[styles.settingsCard, { backgroundColor: theme.colors.card }]}
+      >
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={logout}
+        >
+          <Text style={[styles.logoutText, { color: theme.colors.primary }]}>Sign out</Text>
+        </TouchableOpacity>
+      </View>
+
     </ScrollView>
   );
 };
@@ -532,6 +517,25 @@ const styles = StyleSheet.create({
   roleButtonText: {
     fontSize: 12,
     fontWeight: '600'
+  },
+  logoutButton: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderRadius: 12
+  },
+  logoutText: {
+    fontSize: 16,
+    fontWeight: '600'
+  },
+  workspaceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1
   }
 });
 
