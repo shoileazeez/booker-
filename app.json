@@ -58,6 +58,7 @@
     "backgroundColor": "#ffffff",
     "plugins": [],
     "extra": {
+      "apiUrl": "https://booker-yeqh.onrender.com",
       "eas": {
         "projectId": "595d2e24-df5b-4d3b-b308-7c45a082711b"
       }
