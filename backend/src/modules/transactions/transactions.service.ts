@@ -51,7 +51,7 @@ export class TransactionsService {
       customerName: createTransactionDto.customerName,
       phone: createTransactionDto.phone,
       notes: createTransactionDto.notes,
-      dueDate: createTransactionDto.dueDate ? new Date(createTransactionDto.dueDate) : null,
+      ...(createTransactionDto.dueDate && { dueDate: new Date(createTransactionDto.dueDate) }),
       workspace,
       createdBy: user,
     });
