@@ -41,12 +41,17 @@ export class TransactionsService {
 
     const transaction = this.transactionsRepository.create({
       type: createTransactionDto.type,
-      amount: createTransactionDto.amount,
-      description: createTransactionDto.description,
-      date: createTransactionDto.date,
+      referenceNumber: createTransactionDto.referenceNumber,
+      quantity: createTransactionDto.quantity,
+      unitPrice: createTransactionDto.unitPrice,
+      totalAmount: createTransactionDto.totalAmount,
       category: createTransactionDto.category,
-      status: createTransactionDto.status,
-      itemId: createTransactionDto.itemId,
+      paymentMethod: createTransactionDto.paymentMethod,
+      status: createTransactionDto.status || 'pending',
+      customerName: createTransactionDto.customerName,
+      phone: createTransactionDto.phone,
+      notes: createTransactionDto.notes,
+      dueDate: createTransactionDto.dueDate ? new Date(createTransactionDto.dueDate) : null,
       workspace,
       createdBy: user,
     });

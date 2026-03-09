@@ -29,6 +29,10 @@ export class CreateTransactionDto {
   paymentMethod: 'cash' | 'card' | 'bank' | 'check' | 'credit';
 
   @IsOptional()
+  @IsEnum(['pending', 'completed', 'cancelled'])
+  status?: 'pending' | 'completed' | 'cancelled';
+
+  @IsOptional()
   @IsString()
   customerName?: string;
 
