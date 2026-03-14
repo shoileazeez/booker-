@@ -14,7 +14,7 @@ export const databaseConfig = (): TypeOrmModuleOptions => ({
   database: process.env.DB_NAME || 'booker_db',
   entities: [User, Workspace, InventoryItem, Transaction],
   synchronize: process.env.NODE_ENV !== 'production',
-  migrations: ['dist/database/migrations/*.js'],
+  migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
   migrationsRun: true,
   logging: process.env.NODE_ENV === 'development',
 });
@@ -28,7 +28,7 @@ const dataSourceOptions: DataSourceOptions = {
   password: process.env.DB_PASSWORD || 'password',
   database: process.env.DB_NAME || 'booker_db',
   entities: [User, Workspace, InventoryItem, Transaction],
-  migrations: ['dist/database/migrations/*.js'],
+  migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
   synchronize: false,
 };
 

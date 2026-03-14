@@ -19,7 +19,6 @@ import { useTheme } from '../theme/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { api } from '../api/client';
 import { cacheInventory, getCachedInventory } from '../storage/offlineStore';
-import { cacheInventory, getCachedInventory } from '../storage/offlineStore';
 
 const HomeScreen = function({ navigation }) {
   const themeContext = useTheme();

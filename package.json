@@ -9,28 +9,31 @@
     "dev:ios": "expo start --ios",
     "dev:web": "expo start --web",
     "test:local": "expo start",
-    "build:apk": "eas build --platform android --profile local-android-apk",
-    "build:ipa": "eas build --platform ios --profile local-ios-device",
-    "build:ipa-sim": "eas build --platform ios --profile local-ios-simulator",
-    "build:aab-android": "eas build --platform android --profile production-android-aab",
-    "build:aab-ios": "eas build --platform ios --profile production-ios-aab",
-    "build:playstore": "eas build --platform android --profile production-android-aab",
-    "build:appstore": "eas build --platform ios --profile production-ios-ipa",
+    "build:apk": "eas build --platform android --profile preview",
+    "build:ipa": "eas build --platform ios --profile production",
+    "build:ipa-sim": "eas build --platform ios --profile preview",
+    "build:aab-android": "eas build --platform android --profile production",
+    "build:aab-ios": "eas build --platform ios --profile production",
+    "build:playstore": "eas build --platform android --profile production",
+    "build:appstore": "eas build --platform ios --profile production",
     "build:preview": "eas build --platform all --profile preview",
     "submit:playstore": "eas submit --platform android --latest",
     "submit:appstore": "eas submit --platform ios --latest"
   },
   "dependencies": {
     "@expo/vector-icons": "^13.0.0",
-    "@react-native-async-storage/async-storage": "^3.0.1",
+    "@react-native-async-storage/async-storage": "1.18.2",
     "@react-navigation/bottom-tabs": "^6.0.9",
     "@react-navigation/native": "^6.1.7",
     "@react-navigation/native-stack": "^6.9.12",
     "expo": "~49.0.0",
-    "expo-sqlite": "^55.0.10",
+    "expo-sqlite": "~11.3.3",
     "react": "18.2.0",
     "react-native": "0.72.10",
     "react-native-safe-area-context": "4.6.3",
     "react-native-screens": "~3.22.0"
+  },
+  "devDependencies": {
+    "eas-cli": "^18.3.0"
   }
 }
