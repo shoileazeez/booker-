@@ -20,6 +20,35 @@ export class WorkspaceService {
       throw new NotFoundException('User not found');
     }
 
+    let managerUser: User | null = null;
+
+    if (createWorkspaceDto.parentWorkspaceId) {
+      const parentWorkspace = await this.workspacesRepository.findOne({
+        where: { id: createWorkspaceDto.parentWorkspaceId },
+        relations: ['users', 'createdBy'],
+      });
+
+      if (!parentWorkspace) {
+        throw new NotFoundException('Parent workspace not found');
+      }
+
+      const canManageParent =
+        parentWorkspace.createdBy?.id === userId ||
+        user.role === 'admin' ||
+        user.role === 'super_admin';
+
+      if (!canManageParent) {
+        throw new BadRequestException('You are not allowed to create a branch for this workspace');
+      }
+
+      if (createWorkspaceDto.managerUserId) {
+        managerUser = await this.usersRepository.findOne({ where: { id: createWorkspaceDto.managerUserId } });
+        if (!managerUser) {
+          throw new NotFoundException('Selected manager user not found');
+        }
+      }
+    }
+
     const slug = createWorkspaceDto.name
       .toLowerCase()
       .replace(/\s+/g, '-')
@@ -36,8 +65,11 @@ export class WorkspaceService {
     const workspace = this.workspacesRepository.create({
       ...createWorkspaceDto,
       slug,
+      parentWorkspaceId: createWorkspaceDto.parentWorkspaceId || null,
+      managerUserId: managerUser?.id || null,
+      managerUser: managerUser || null,
       createdBy: user,
-      users: [user],
+      users: managerUser && managerUser.id !== user.id ? [user, managerUser] : [user],
     });
 
     const saved = await this.workspacesRepository.save(workspace);
@@ -67,7 +99,7 @@ export class WorkspaceService {
   async getWorkspace(workspaceId: string) {
     const workspace = await this.workspacesRepository.findOne({
       where: { id: workspaceId },
-      relations: ['users', 'createdBy'],
+      relations: ['users', 'createdBy', 'parentWorkspace'],
     });
 
     if (!workspace) {
@@ -81,6 +113,73 @@ export class WorkspaceService {
     const workspace = await this.getWorkspace(workspaceId);
     Object.assign(workspace, updateData);
     return await this.workspacesRepository.save(workspace);
+  }
+
+  async getBranches(workspaceId: string, userId: string) {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+      relations: ['workspaces'],
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const hasAccess = user.workspaces?.some((workspace) => workspace.id === workspaceId);
+    if (!hasAccess) {
+      throw new NotFoundException('Workspace not found');
+    }
+
+    return this.workspacesRepository.find({
+      where: { parentWorkspaceId: workspaceId },
+      relations: ['createdBy', 'users', 'managerUser'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async findWorkspaceUserByEmail(workspaceId: string, requesterId: string, email: string) {
+    const normalizedEmail = email?.trim().toLowerCase();
+    if (!normalizedEmail) {
+      throw new BadRequestException('Email is required');
+    }
+
+    const workspace = await this.workspacesRepository.findOne({
+      where: { id: workspaceId },
+      relations: ['users', 'createdBy'],
+    });
+
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
+
+    const requester = await this.usersRepository.findOne({ where: { id: requesterId } });
+    if (!requester) {
+      throw new NotFoundException('Requester not found');
+    }
+
+    const canManageWorkspace =
+      workspace.createdBy?.id === requesterId ||
+      requester.role === 'admin' ||
+      requester.role === 'super_admin';
+
+    if (!canManageWorkspace) {
+      throw new BadRequestException('You are not allowed to manage this workspace');
+    }
+
+    const foundUser = await this.usersRepository.findOne({ where: { email: normalizedEmail } });
+    if (!foundUser) {
+      throw new NotFoundException('No user found with this email. They need to register first.');
+    }
+
+    const alreadyMember = workspace.users?.some((member) => member.id === foundUser.id) || false;
+
+    return {
+      id: foundUser.id,
+      name: foundUser.name,
+      email: foundUser.email,
+      role: foundUser.role,
+      alreadyMember,
+    };
   }
 
   async addUserToWorkspace(workspaceId: string, userId: string) {

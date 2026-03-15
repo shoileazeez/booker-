@@ -16,7 +16,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { api } from '../api/client';
 
-const AddItemScreen = function() {
+const AddItemScreen = function({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
   const { currentWorkspaceId, queueAction } = useWorkspace();
@@ -293,14 +293,24 @@ const AddItemScreen = function() {
               />
             </View>
 
-            <TouchableOpacity
-              style={[styles.addButton, { backgroundColor: theme.colors.primary, opacity: loading ? 0.7 : 1 }]}
-              onPress={handleAddItem}
-              disabled={loading}
-            >
-              <MaterialIcons name="add" size={20} color="#FFFFFF" />
-              <Text style={styles.addButtonText}>{loading ? 'Adding…' : 'Add Item'}</Text>
-            </TouchableOpacity>
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[styles.cancelButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                onPress={() => navigation.goBack()}
+                disabled={loading}
+              >
+                <Text style={[styles.cancelButtonText, { color: theme.colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.addButton, { backgroundColor: theme.colors.primary, opacity: loading ? 0.7 : 1 }]}
+                onPress={handleAddItem}
+                disabled={loading}
+              >
+                <MaterialIcons name="add" size={20} color="#FFFFFF" />
+                <Text style={styles.addButtonText}>{loading ? 'Adding…' : 'Add Item'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -373,7 +383,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 16,
     borderRadius: 12,
+    flex: 1,
     marginTop: 20
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  cancelButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    marginTop: 20,
+    marginRight: 10,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600'
   },
   addButtonText: {
     fontSize: 18,

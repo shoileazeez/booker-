@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Booker",
-    "slug": "booker-inventory",
+    "name": "BizRecord",
+    "slug": "bizrecord",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
@@ -9,13 +9,13 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1a73e8"
+      "backgroundColor": "#F3F7F5"
     },
     "platforms": [
       "ios",
       "android"
     ],
-    "scheme": "bookerapp",
+    "scheme": "bizrecord",
     "sdkVersion": "49.0.0",
     "runtimeVersion": "1.0.0",
     "updates": {
@@ -54,7 +54,11 @@
     },
     "description": "Inventory management app for managing stock, tracking transactions, and generating reports",
     "privacy": "https://example.com/privacy",
-    "primaryColor": "#1a73e8",
+    "primaryColor": "#00A676",
+    "androidStatusBar": {
+      "backgroundColor": "#F3F7F5",
+      "barStyle": "dark-content"
+    },
     "backgroundColor": "#ffffff",
     "plugins": [],
     "extra": {

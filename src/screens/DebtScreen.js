@@ -152,7 +152,7 @@ export default function DebtScreen({ navigation }) {
             const isPending = item.status === 'pending';
 
             return (
-              <Card style={styles.card}>
+              <Card style={[styles.card, { borderColor: theme.colors.border }]}> 
                 <View style={styles.row}>
                   <View style={styles.info}>
                     <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: isCompact ? 15 : 16 }}>
@@ -216,9 +216,22 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 10,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
   },
   addButtonText: { fontWeight: '700', marginLeft: 6 },
-  card: { marginBottom: 12 },
+  card: {
+    marginBottom: 12,
+    borderWidth: 1,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   info: { flex: 1 },
   amountContainer: { alignItems: 'flex-end', marginLeft: 12, maxWidth: '45%' },

@@ -2,20 +2,27 @@
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Card, Subtle } from '../../components/UI';
 import { useTheme } from '../../theme/ThemeContext';
+import { useWorkspace } from '../../context/WorkspaceContext';
 import { MaterialIcons } from '@expo/vector-icons';
 import { api } from '../../api/client';
 
 export default function BranchListScreen({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
+  const { currentWorkspaceId } = useWorkspace();
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const loadBranches = async () => {
+      if (!currentWorkspaceId) {
+        setBranches([]);
+        return;
+      }
+
       setLoading(true);
       try {
-        const data = await api.get('/workspaces');
+        const data = await api.get(`/workspaces/${currentWorkspaceId}/branches`);
         setBranches(Array.isArray(data) ? data : []);
       } catch (err) {
         setBranches([]);
@@ -25,7 +32,7 @@ export default function BranchListScreen({ navigation }) {
     };
 
     loadBranches();
-  }, []);
+  }, [currentWorkspaceId]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -54,6 +61,9 @@ export default function BranchListScreen({ navigation }) {
                 <View>
                   <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>{item.name}</Text>
                   <Subtle>{item.status || 'active'} {new Date(item.createdAt).toLocaleDateString()}</Subtle>
+                  <Subtle>
+                    Manager: {item.managerUser?.name ? `${item.managerUser.name} (${item.managerUser.email})` : 'Not assigned'}
+                  </Subtle>
                 </View>
                 <TouchableOpacity>
                   <Text style={{ color: theme.colors.primary }}>Manage</Text>
@@ -63,7 +73,7 @@ export default function BranchListScreen({ navigation }) {
           )}
           ListEmptyComponent={() => (
             <View style={{ padding: 20 }}>
-              <Subtle>No branches yet</Subtle>
+              <Subtle>No branches for this workspace yet</Subtle>
             </View>
           )}
         />

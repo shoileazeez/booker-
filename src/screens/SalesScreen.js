@@ -101,7 +101,12 @@ export default function SalesScreen({ navigation }) {
         >
           <MaterialIcons name="arrow-back" size={20} color={theme.colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>Sales</Text>
+        <View>
+          <Text style={[styles.pageTitle, { color: theme.colors.textPrimary }]}>Sales</Text>
+          <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+            Build cart and complete multi-item sales
+          </Text>
+        </View>
       </View>
 
       <View style={[styles.searchContainer, { paddingHorizontal: listPadding, alignSelf: 'center', width: contentWidth }]}> 
@@ -131,7 +136,7 @@ export default function SalesScreen({ navigation }) {
           renderItem={({ item }) => {
             const inCart = cart.find((c) => c.id === item.id);
             return (
-              <Card style={styles.itemCard}>
+              <Card style={[styles.itemCard, { borderColor: theme.colors.border }]}> 
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <View style={{ flex: 1 }}>
                     <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: isCompact ? 15 : 16 }}>{item.name}</Text>
@@ -154,7 +159,7 @@ export default function SalesScreen({ navigation }) {
       )}
 
       {cart.length > 0 && (
-        <View style={[styles.cartFooter, { backgroundColor: theme.colors.card, alignSelf: 'center', width: contentWidth, paddingHorizontal: listPadding }]}> 
+        <View style={[styles.cartFooter, { backgroundColor: theme.colors.card, alignSelf: 'center', width: contentWidth, paddingHorizontal: listPadding, borderColor: theme.colors.border }]}> 
           <View>
             <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>{cart.length} item(s)</Text>
             <Text style={{ color: theme.colors.textSecondary }}>Total: ₦{cartTotal.toLocaleString()}</Text>
@@ -213,7 +218,13 @@ const styles = StyleSheet.create({
   itemCard: {
     padding: 16,
     marginBottom: 12,
-    borderRadius: 14
+    borderRadius: 14,
+    borderWidth: 1,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
   addButton: {
     padding: 10,
@@ -222,10 +233,12 @@ const styles = StyleSheet.create({
   cartFooter: {
     paddingVertical: 14,
     borderTopWidth: 1,
-    borderColor: '#E1E1E1',
+    borderWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
+    borderRadius: 14,
+    marginBottom: 8,
   },
   cartAction: {
     paddingVertical: 10,

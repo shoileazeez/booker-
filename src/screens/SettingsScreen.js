@@ -26,8 +26,6 @@ const SettingsScreen = function({ navigation }) {
 
   const currentWorkspace = workspace.workspaces.find((w) => w.id === workspace.currentWorkspaceId);
   const userRole = user?.role || 'user';
-  const isWorkspaceOwner = userRole === 'super_admin' || userRole === 'admin' ||
-    (currentWorkspace?.createdBy?.id && currentWorkspace.createdBy.id === user?.id);
   const contentWidth = Math.min(width - 32, 760);
   const horizontalPadding = width < 380 ? 12 : 16;
   const titleSize = width < 380 ? 24 : 28;
@@ -135,7 +133,7 @@ const SettingsScreen = function({ navigation }) {
                   { color: theme.colors.textPrimary }
                 ]}
               >
-                About InventoryPro
+                About BizRecord
               </Text>
               <Text
                 style={[
@@ -143,7 +141,7 @@ const SettingsScreen = function({ navigation }) {
                   { color: theme.colors.textSecondary }
                 ]}
               >
-                Version 1.0.0 - Personal inventory management
+                Version 1.0.0 - Business records and inventory tracking
               </Text>
             </View>
           </View>
@@ -193,45 +191,41 @@ const SettingsScreen = function({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Branch Manager — workspace owners / admins only */}
-        {isWorkspaceOwner && (
-          <View style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <MaterialIcons name="account-tree" size={24} color={theme.colors.primary} />
-              <View style={styles.settingText}>
-                <Text style={[styles.settingTitle, { color: theme.colors.textPrimary }]}>
-                  Branch Manager
-                </Text>
-                <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>
-                  View and manage workspace branches
-                </Text>
-              </View>
+        {/* Branch Manager */}
+        <View style={styles.settingItem}>
+          <View style={styles.settingInfo}>
+            <MaterialIcons name="account-tree" size={24} color={theme.colors.primary} />
+            <View style={styles.settingText}>
+              <Text style={[styles.settingTitle, { color: theme.colors.textPrimary }]}> 
+                Branch Manager
+              </Text>
+              <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}> 
+                View and manage workspace branches
+              </Text>
             </View>
-            <TouchableOpacity onPress={function() { navigation.navigate('BranchList'); }}>
-              <MaterialIcons name="chevron-right" size={24} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
           </View>
-        )}
+          <TouchableOpacity onPress={function() { navigation.navigate('BranchList'); }}>
+            <MaterialIcons name="chevron-right" size={24} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
 
         {/* Create Branch */}
-        {isWorkspaceOwner && (
-          <View style={[styles.settingItem, { borderBottomWidth: 0 }]}>
-            <View style={styles.settingInfo}>
-              <MaterialIcons name="add-location-alt" size={24} color={theme.colors.primary} />
-              <View style={styles.settingText}>
-                <Text style={[styles.settingTitle, { color: theme.colors.textPrimary }]}>
-                  Create Branch
-                </Text>
-                <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>
-                  Add new branch to workspace
-                </Text>
-              </View>
+        <View style={[styles.settingItem, { borderBottomWidth: 0 }]}> 
+          <View style={styles.settingInfo}>
+            <MaterialIcons name="add-location-alt" size={24} color={theme.colors.primary} />
+            <View style={styles.settingText}>
+              <Text style={[styles.settingTitle, { color: theme.colors.textPrimary }]}> 
+                Create Branch
+              </Text>
+              <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}> 
+                Add new branch to workspace
+              </Text>
             </View>
-            <TouchableOpacity onPress={function() { navigation.navigate('CreateBranch'); }}>
-              <MaterialIcons name="add-circle" size={24} color={theme.colors.primary} />
-            </TouchableOpacity>
           </View>
-        )}
+          <TouchableOpacity onPress={function() { navigation.navigate('CreateBranch'); }}>
+            <MaterialIcons name="add-circle" size={24} color={theme.colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View
@@ -421,11 +415,12 @@ const styles = StyleSheet.create({
   settingsCard: {
     marginTop: 12,
     borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3
+    borderWidth: 1,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
   },
   settingItem: {
     flexDirection: 'row',

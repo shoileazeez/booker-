@@ -34,8 +34,25 @@ export class Workspace {
   @JoinColumn({ name: 'created_by' })
   createdBy: User;
 
+  @Column({ name: 'manager_user_id', nullable: true })
+  managerUserId: string | null;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'manager_user_id' })
+  managerUser: User | null;
+
   @Column({ unique: true })
   slug: string;
+
+  @Column({ name: 'parent_workspace_id', nullable: true })
+  parentWorkspaceId: string | null;
+
+  @ManyToOne(() => Workspace, (workspace) => workspace.branches, { nullable: true })
+  @JoinColumn({ name: 'parent_workspace_id' })
+  parentWorkspace: Workspace | null;
+
+  @OneToMany(() => Workspace, (workspace) => workspace.parentWorkspace)
+  branches: Workspace[];
 
   @ManyToMany(() => User, (user) => user.workspaces)
   users: User[];

@@ -214,7 +214,7 @@ const HomeScreen = function({ navigation }) {
             <Text
               style={[styles.headerTitle, { color: theme.colors.textPrimary }]}
             >
-              InventoryPro
+              BizRecord Inventory
             </Text>
             <Text
               style={[
@@ -232,7 +232,7 @@ const HomeScreen = function({ navigation }) {
           </View>
           <View style={styles.headerActions}>
             <TouchableOpacity
-              style={styles.addButton}
+              style={[styles.addButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
               onPress={handleAddItem}
             >
               <MaterialIcons name="add" size={20} color={theme.colors.primary} />
@@ -325,7 +325,7 @@ const HomeScreen = function({ navigation }) {
             <TouchableOpacity
               style={[
                 styles.itemCard,
-                { backgroundColor: theme.colors.card }
+                { backgroundColor: theme.colors.card, borderColor: theme.colors.border }
               ]}
               onPress={function() {
                 handleOpenUpdateModal(item);
@@ -630,7 +630,6 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#ccc',
     marginRight: 10
   },
   addButtonText: {
@@ -692,6 +691,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderRadius: 12,
+    borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,

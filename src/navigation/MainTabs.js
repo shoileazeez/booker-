@@ -24,23 +24,45 @@ const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 function TabNavigator() {
+  const { theme } = useTheme();
+
   return (
     <Tab.Navigator
       initialRouteName="Home"
       screenOptions={({ route }) => ({
         headerShown: false,
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.textSecondary,
+        tabBarHideOnKeyboard: true,
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+          marginBottom: 2,
+        },
+        tabBarItemStyle: {
+          borderRadius: 12,
+          marginHorizontal: 2,
+        },
         tabBarStyle: {
-          height: 64,
+          height: 68,
           paddingBottom: 8,
           paddingTop: 6,
+          paddingHorizontal: 8,
+          borderTopWidth: 0,
+          backgroundColor: theme.colors.card,
+          shadowColor: '#0f172a',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
+          elevation: 14,
         },
-        tabBarIcon: ({ color, size }) => {
+        tabBarIcon: ({ color, focused }) => {
           let name = 'dashboard';
           if (route.name === 'Home') name = 'dashboard';
           if (route.name === 'Sales') name = 'receipt-long';
           if (route.name === 'Debt') name = 'account-balance';
           if (route.name === 'Inventory') name = 'inventory';
-          return <MaterialIcons name={name} size={size} color={color} />;
+          return <MaterialIcons name={name} size={focused ? 24 : 22} color={color} />;
         }
       })}
     >

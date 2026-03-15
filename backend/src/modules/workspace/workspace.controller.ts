@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
   Put,
@@ -34,6 +35,20 @@ export class WorkspaceController {
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.workspaceService.getWorkspace(id);
+  }
+
+  @Get(':id/branches')
+  async getBranches(@Param('id') id: string, @Request() req) {
+    return this.workspaceService.getBranches(id, req.user.sub);
+  }
+
+  @Get(':id/users/search')
+  async findWorkspaceUserByEmail(
+    @Param('id') id: string,
+    @Request() req,
+    @Query('email') email: string,
+  ) {
+    return this.workspaceService.findWorkspaceUserByEmail(id, req.user.sub, email);
   }
 
   @Put(':id')
