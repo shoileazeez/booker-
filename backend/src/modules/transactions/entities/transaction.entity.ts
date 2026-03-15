@@ -27,7 +27,7 @@ export class Transaction {
 
   @ManyToOne(() => InventoryItem, { nullable: true })
   @JoinColumn({ name: 'item_id' })
-  item: InventoryItem;
+  item: InventoryItem | null;
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   quantity: number;

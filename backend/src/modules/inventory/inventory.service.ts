@@ -85,12 +85,10 @@ export class InventoryService {
     const item = await this.getItem(itemId);
 
     // Preserve transaction history while allowing item deletion.
-    await this.transactionsRepository
-      .createQueryBuilder()
-      .update(Transaction)
-      .set({ item: null })
-      .where('item_id = :itemId', { itemId })
-      .execute();
+    await this.transactionsRepository.query(
+      'UPDATE transactions SET item_id = NULL WHERE item_id = $1',
+      [itemId],
+    );
 
     await this.itemsRepository.remove(item);
     return { message: 'Item deleted successfully' };
