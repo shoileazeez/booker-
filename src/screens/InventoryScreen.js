@@ -18,11 +18,13 @@ import { useTheme } from '../theme/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { api } from '../api/client';
 import { cacheInventory, getCachedInventory } from '../storage/offlineStore';
+import { EmptyState, SkeletonBlock } from '../components/UI';
 
 const HomeScreen = function({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const { currentWorkspaceId, queueAction } = useWorkspace();
+  const { currentWorkspaceId, queueAction, workspaces } = useWorkspace();
+  const currentWorkspace = workspaces.find((workspace) => workspace.id === currentWorkspaceId);
 
   const [items, setItems] = useState([]);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -214,7 +216,7 @@ const HomeScreen = function({ navigation }) {
             <Text
               style={[styles.headerTitle, { color: theme.colors.textPrimary }]}
             >
-              InventoryPro
+              {`${currentWorkspace?.name || 'Workspace'} Inventory`}
             </Text>
             <Text
               style={[
@@ -232,7 +234,7 @@ const HomeScreen = function({ navigation }) {
           </View>
           <View style={styles.headerActions}>
             <TouchableOpacity
-              style={styles.addButton}
+              style={[styles.addButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
               onPress={handleAddItem}
             >
               <MaterialIcons name="add" size={20} color={theme.colors.primary} />
@@ -309,6 +311,14 @@ const HomeScreen = function({ navigation }) {
         </ScrollView>
       </View>
 
+      {loadingItems ? (
+        <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
+          <SkeletonBlock height={20} width="45%" />
+          <SkeletonBlock height={86} />
+          <SkeletonBlock height={86} />
+          <SkeletonBlock height={86} />
+        </View>
+      ) : (
       <FlatList
         data={filteredItems}
         keyExtractor={function(item, index) {
@@ -325,7 +335,7 @@ const HomeScreen = function({ navigation }) {
             <TouchableOpacity
               style={[
                 styles.itemCard,
-                { backgroundColor: theme.colors.card }
+                { backgroundColor: theme.colors.card, borderColor: theme.colors.border }
               ]}
               onPress={function() {
                 handleOpenUpdateModal(item);
@@ -425,13 +435,16 @@ const HomeScreen = function({ navigation }) {
           }
         ]}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>No inventory items yet</Text>
-            <Text style={[styles.emptySubtitle, { color: theme.colors.textSecondary }]}>Tap Add to create your first item.</Text>
-          </View>
+          <EmptyState
+            icon="inventory-2"
+            title="No inventory items yet"
+            subtitle="Tap Add to create your first item"
+            style={styles.emptyState}
+          />
         }
         showsVerticalScrollIndicator={false}
       />
+      )}
 
       {showUpdateModal && selectedItem ? (
         <Modal
@@ -630,7 +643,6 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#ccc',
     marginRight: 10
   },
   addButtonText: {
@@ -692,6 +704,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderRadius: 12,
+    borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,

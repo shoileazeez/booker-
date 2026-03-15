@@ -9,6 +9,9 @@ export function initDb() {
   if (!db) return;
 
   db.transaction((tx) => {
+    tx.executeSql('PRAGMA journal_mode = WAL;');
+    tx.executeSql('PRAGMA synchronous = NORMAL;');
+
     tx.executeSql(
       `CREATE TABLE IF NOT EXISTS inventory (
         id TEXT PRIMARY KEY,
@@ -34,6 +37,10 @@ export function initDb() {
         updatedAt INTEGER
       );`,
     );
+
+    tx.executeSql('CREATE INDEX IF NOT EXISTS idx_inventory_workspace ON inventory(workspaceId);');
+    tx.executeSql('CREATE INDEX IF NOT EXISTS idx_debts_workspace ON debts(workspaceId);');
+    tx.executeSql('CREATE INDEX IF NOT EXISTS idx_transactions_workspace_type ON transactions(workspaceId, type);');
   });
 }
 

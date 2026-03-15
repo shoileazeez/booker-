@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, useWindowDimensions } from 'react-native';
-import { Card, Subtle } from '../components/UI';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { Card, Subtle, EmptyState, SkeletonBlock } from '../components/UI';
 import { useTheme } from '../theme/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { api } from '../api/client';
@@ -58,19 +58,37 @@ export default function TransactionsScreen({ navigation }) {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 24 }} />
+        <View style={{ alignSelf: 'center', width: contentWidth, paddingHorizontal: 12, marginTop: 12 }}>
+          <SkeletonBlock height={18} width="40%" />
+          <SkeletonBlock height={64} />
+          <SkeletonBlock height={64} />
+          <SkeletonBlock height={64} />
+        </View>
       ) : (
-        <FlatList data={transactions} keyExtractor={(t, index) => (t?.id != null ? String(t.id) : `tx-${index}`)} style={{ alignSelf: 'center', width: contentWidth }} contentContainerStyle={{ padding: 12, paddingBottom: 20 }} renderItem={({ item }) => (
-        <Card>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <View>
-              <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', textTransform: 'capitalize' }}>{item.type}</Text>
-              <Subtle>{item.customerName || item.category || 'N/A'} • {new Date(item.createdAt).toLocaleDateString()}</Subtle>
-            </View>
-            <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>{renderAmount(item)}</Text>
-          </View>
-        </Card>
-      )} ListEmptyComponent={() => <View style={{ padding: 20 }}><Subtle>No transactions</Subtle></View>} />
+        <FlatList
+          data={transactions}
+          keyExtractor={(t, index) => (t?.id != null ? String(t.id) : `tx-${index}`)}
+          style={{ alignSelf: 'center', width: contentWidth }}
+          contentContainerStyle={{ padding: 12, paddingBottom: 20 }}
+          renderItem={({ item }) => (
+            <Card>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <View>
+                  <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', textTransform: 'capitalize' }}>{item.type}</Text>
+                  <Subtle>{item.customerName || item.category || 'N/A'} • {new Date(item.createdAt).toLocaleDateString()}</Subtle>
+                </View>
+                <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>{renderAmount(item)}</Text>
+              </View>
+            </Card>
+          )}
+          ListEmptyComponent={() => (
+            <EmptyState
+              icon="receipt-long"
+              title="No transactions"
+              subtitle="Sales, expenses and debts will appear here"
+            />
+          )}
+        />
       )}
     </View>
   );

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { cacheTransactions, getCachedTransactions } from '../storage/offlineStore';
@@ -25,6 +26,13 @@ export default function DashboardScreen({ navigation }) {
   const [loadingActivity, setLoadingActivity] = React.useState(false);
   const [activityError, setActivityError] = React.useState(null);
   const [inventoryItems, setInventoryItems] = React.useState([]);
+  const [refreshTick, setRefreshTick] = React.useState(0);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setRefreshTick((prev) => prev + 1);
+    }, []),
+  );
 
   React.useEffect(() => {
     const loadActivity = async () => {
@@ -63,7 +71,7 @@ export default function DashboardScreen({ navigation }) {
     };
 
     loadActivity();
-  }, [workspace.currentWorkspaceId]);
+  }, [workspace.currentWorkspaceId, refreshTick]);
 
   React.useEffect(() => {
     const loadInventory = async () => {
@@ -84,7 +92,7 @@ export default function DashboardScreen({ navigation }) {
     };
 
     loadInventory();
-  }, [workspace.currentWorkspaceId]);
+  }, [workspace.currentWorkspaceId, refreshTick]);
 
   const currentWorkspace = workspace.workspaces.find((w) => w.id === workspace.currentWorkspaceId);
   const inventoryValue = inventoryItems.reduce((sum, item) => {
@@ -128,7 +136,7 @@ export default function DashboardScreen({ navigation }) {
       </View>
 
       {/* Inventory Stats Card */}
-      <Card style={{ padding: compact ? 12 : 14 }}>
+      <Card style={[styles.heroCard, { padding: compact ? 12 : 14, borderColor: theme.colors.primary + '22' }]}>
         <View style={{ flexDirection: compact ? 'column' : 'row', justifyContent: 'space-between' }}>
           <View style={{ flex: 1 }}>
             <Title>Total inventory value</Title>
@@ -150,21 +158,21 @@ export default function DashboardScreen({ navigation }) {
         <Text style={{ color: theme.colors.textSecondary, marginBottom: 8 }}>Quick actions</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8 }}>
           <TouchableOpacity 
-            style={[styles.action, { backgroundColor: theme.colors.card }]}
+            style={[styles.action, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
             onPress={handleAddItem}
           >
             <MaterialIcons name="add-circle-outline" size={20} color={theme.colors.primary} />
             <Text style={{ color: theme.colors.textPrimary, fontSize: compact ? 11 : 12, marginTop: 6 }}>Add item</Text>
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.action, { backgroundColor: theme.colors.card }]}
+            style={[styles.action, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
             onPress={handleRecordSale}
           >
             <MaterialIcons name="shopping-cart" size={20} color={theme.colors.success} />
             <Text style={{ color: theme.colors.textPrimary, fontSize: compact ? 11 : 12, marginTop: 6 }}>Record sale</Text>
           </TouchableOpacity>
           <TouchableOpacity 
-            style={[styles.action, { backgroundColor: theme.colors.card }]}
+            style={[styles.action, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
             onPress={handleRecordExpense}
           >
             <MaterialIcons name="money-off" size={20} color={theme.colors.warning} />
@@ -225,6 +233,15 @@ export default function DashboardScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   contentWrap: { maxWidth: 860 },
+  heroCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
   workspaceBadge: { 
     flexShrink: 1,
     paddingVertical: 8,
@@ -238,7 +255,13 @@ const styles = StyleSheet.create({
     padding: 12, 
     borderRadius: 10, 
     flexGrow: 1,
+    borderWidth: 1,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1,
   }
 });

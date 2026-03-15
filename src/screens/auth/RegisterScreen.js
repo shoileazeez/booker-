@@ -62,8 +62,11 @@ export default function RegisterScreen({ navigation }) {
         contentContainerStyle={[styles.container, { backgroundColor: theme.colors.background }]}
         keyboardShouldPersistTaps="handled"
       >
-      <Text style={[styles.logo, { color: theme.colors.textPrimary, fontSize: isCompact ? 30 : 36 }]}>Booker</Text>
-      <View style={[styles.form, { backgroundColor: theme.colors.card, width: formWidth }]}> 
+      <View style={styles.hero}>
+        <Text style={[styles.logo, { color: theme.colors.textPrimary, fontSize: isCompact ? 32 : 38 }]}>BizRecord</Text>
+        <Text style={[styles.tagline, { color: theme.colors.textSecondary }]}>Create your account to start managing your business</Text>
+      </View>
+      <View style={[styles.form, { backgroundColor: theme.colors.card, width: formWidth, borderColor: theme.colors.border }]}> 
         <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Name</Text>
         <TextInput
           style={[styles.input, { color: theme.colors.textPrimary, borderColor: theme.colors.border }]}
@@ -139,8 +142,19 @@ export default function RegisterScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
+  hero: { alignItems: 'center', marginBottom: 18 },
   logo: { fontWeight: '700', marginBottom: 24 },
-  form: { borderRadius: 14, padding: 16 },
+  tagline: { fontSize: 13, marginTop: -14, textAlign: 'center' },
+  form: {
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
+  },
   label: { fontSize: 12, marginTop: 8 },
   input: {
     paddingVertical: 10,

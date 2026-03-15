@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Transaction } from './entities/transaction.entity';
@@ -39,12 +39,52 @@ export class TransactionsService {
       throw new NotFoundException('User not found');
     }
 
+    let item: InventoryItem | null = null;
+    let quantity = Number(createTransactionDto.quantity || 0);
+    let unitPrice = Number(createTransactionDto.unitPrice || 0);
+    let totalAmount = Number(createTransactionDto.totalAmount || 0);
+
+    if (createTransactionDto.type === 'sale') {
+      if (!createTransactionDto.itemId) {
+        throw new BadRequestException('itemId is required for sale transactions');
+      }
+
+      item = await this.itemsRepository.findOne({
+        where: {
+          id: createTransactionDto.itemId,
+          workspace: { id: workspaceId },
+        },
+        relations: ['workspace'],
+      });
+
+      if (!item) {
+        throw new NotFoundException('Selected item not found in this workspace');
+      }
+
+      quantity = Number(createTransactionDto.quantity || 0);
+      if (!quantity || quantity <= 0) {
+        throw new BadRequestException('quantity must be greater than zero');
+      }
+
+      const currentStock = Number(item.quantity || 0);
+      if (quantity > currentStock) {
+        throw new BadRequestException(`Insufficient stock. Available: ${currentStock}`);
+      }
+
+      unitPrice = Number(item.sellingPrice || 0);
+      totalAmount = unitPrice * quantity;
+
+      item.quantity = Number((currentStock - quantity).toFixed(2));
+      await this.itemsRepository.save(item);
+    }
+
     const transaction = this.transactionsRepository.create({
       type: createTransactionDto.type,
       referenceNumber: createTransactionDto.referenceNumber,
-      quantity: createTransactionDto.quantity,
-      unitPrice: createTransactionDto.unitPrice,
-      totalAmount: createTransactionDto.totalAmount,
+      item: item || undefined,
+      quantity,
+      unitPrice,
+      totalAmount,
       category: createTransactionDto.category,
       paymentMethod: createTransactionDto.paymentMethod,
       status: createTransactionDto.status || 'pending',

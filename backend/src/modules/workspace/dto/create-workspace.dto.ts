@@ -11,4 +11,12 @@ export class CreateWorkspaceDto {
   @IsOptional()
   @IsString()
   logo?: string;
+
+  @IsOptional()
+  @IsString()
+  parentWorkspaceId?: string;
+
+  @IsOptional()
+  @IsString()
+  managerUserId?: string;
 }

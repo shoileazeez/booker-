@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
-import { Card, Subtle } from '../components/UI';
+import { Card, Subtle, EmptyState, SkeletonBlock } from '../components/UI';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { api } from '../api/client';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -79,8 +79,14 @@ export default function ReportsScreen({ navigation }) {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 24 }} />
+        <View style={{ width: contentWidth, marginTop: 12 }}>
+          <SkeletonBlock height={20} width="35%" />
+          <SkeletonBlock height={88} />
+          <SkeletonBlock height={88} />
+          <SkeletonBlock height={88} />
+        </View>
       ) : (
+        summary ? (
         <>
           <Card style={{ marginVertical: 8, width: contentWidth }}>
             <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>Sales</Text>
@@ -104,6 +110,9 @@ export default function ReportsScreen({ navigation }) {
             <Subtle style={{ marginTop: 6 }}>Transactions: {summary?.transactionCount || 0}</Subtle>
           </Card>
         </>
+        ) : (
+          <EmptyState icon="analytics" title="No report data" subtitle="Record transactions to view summary reports" style={{ width: contentWidth }} />
+        )
       )}
     </View>
   );

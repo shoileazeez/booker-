@@ -11,25 +11,68 @@ import {
   Alert,
 } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
-import { useAuth } from '../../context/AuthContext';
+import { useWorkspace } from '../../context/WorkspaceContext';
 import { api } from '../../api/client';
-import { Card, Title } from '../../components/UI';
+import { Card, Title, AppButton } from '../../components/UI';
 import { MaterialIcons } from '@expo/vector-icons';
 
 export default function BranchCreateScreen({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const { user } = useAuth();
+  const { currentWorkspaceId } = useWorkspace();
 
   const [branchName, setBranchName] = useState('');
   const [location, setLocation] = useState('');
-  const [manager, setManager] = useState('');
+  const [managerEmail, setManagerEmail] = useState('');
+  const [selectedManager, setSelectedManager] = useState(null);
+  const [managerSearchMessage, setManagerSearchMessage] = useState('');
+  const [managerSearchState, setManagerSearchState] = useState('idle');
+  const [managerSearchLoading, setManagerSearchLoading] = useState(false);
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const userRole = user?.role || 'user';
-  const canCreateWorkspace = userRole === 'super_admin' || userRole === 'admin';
+  const getErrorMessage = (err, fallback) => {
+    const raw = err?.message ?? fallback;
+    if (Array.isArray(raw)) return raw.join(', ');
+    if (typeof raw === 'string') return raw;
+    return fallback;
+  };
+
+  const handleFindManager = async () => {
+    const email = managerEmail.trim().toLowerCase();
+    if (!email) {
+      Alert.alert('Validation Error', 'Enter manager email first');
+      return;
+    }
+
+    if (!currentWorkspaceId) {
+      Alert.alert('Workspace required', 'Please select a workspace before assigning manager');
+      return;
+    }
+
+    setManagerSearchLoading(true);
+    setManagerSearchMessage('');
+    setManagerSearchState('idle');
+    try {
+      let user;
+      try {
+        user = await api.get(`/workspaces/${currentWorkspaceId}/users/search`, { email });
+      } catch (searchErr) {
+        // Backward-compatible fallback route
+        user = await api.get(`/workspaces/${currentWorkspaceId}/users/email/${encodeURIComponent(email)}`);
+      }
+      setSelectedManager(user);
+      setManagerSearchState('success');
+      setManagerSearchMessage(`Manager selected: ${user.name} (${user.email})`);
+    } catch (err) {
+      setSelectedManager(null);
+      setManagerSearchState('error');
+      setManagerSearchMessage(getErrorMessage(err, 'No user found with this email'));
+    } finally {
+      setManagerSearchLoading(false);
+    }
+  };
 
   const handleCreateBranch = async () => {
     if (!branchName || !location) {
@@ -37,11 +80,24 @@ export default function BranchCreateScreen({ navigation }) {
       return;
     }
 
+    if (!currentWorkspaceId) {
+      Alert.alert('Workspace required', 'Please select a workspace before creating a branch');
+      return;
+    }
+
     setLoading(true);
     try {
+      if (managerEmail.trim() && !selectedManager) {
+        Alert.alert('Manager required', 'Please find and select a valid manager account before creating the branch');
+        setLoading(false);
+        return;
+      }
+
       await api.post('/workspaces', {
         name: branchName.trim(),
-        description: [location, manager, phone, address].filter(Boolean).join(' | '),
+        description: [location, phone, address].filter(Boolean).join(' | '),
+        parentWorkspaceId: currentWorkspaceId,
+        managerUserId: selectedManager?.id,
       });
 
       Alert.alert('Branch Created', `${branchName} - ${location}`, [
@@ -53,7 +109,7 @@ export default function BranchCreateScreen({ navigation }) {
         },
       ]);
     } catch (err) {
-      Alert.alert('Error', err?.message || 'Unable to create branch');
+      Alert.alert('Error', getErrorMessage(err, 'Unable to create branch'));
     } finally {
       setLoading(false);
     }
@@ -76,18 +132,6 @@ export default function BranchCreateScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Permission Check */}
-        {!canCreateWorkspace && (
-          <Card style={{ backgroundColor: theme.colors.warning + '20', borderLeftWidth: 4, borderLeftColor: theme.colors.warning, marginBottom: 16 }}>
-            <View style={{ flexDirection: 'row' }}>
-              <MaterialIcons name="lock" size={20} color={theme.colors.warning} style={{ marginRight: 8 }} />
-              <Text style={{ color: theme.colors.warning, flex: 1 }}>
-                Only workspace admins can create branches
-              </Text>
-            </View>
-          </Card>
-        )}
-
         {/* Branch Details Card */}
         <Card style={{ marginBottom: 16 }}>
           <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginBottom: 8 }}>Branch Name *</Text>
@@ -104,7 +148,6 @@ export default function BranchCreateScreen({ navigation }) {
             placeholderTextColor={theme.colors.textSecondary}
             value={branchName}
             onChangeText={setBranchName}
-            editable={canCreateWorkspace}
           />
 
           <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginBottom: 8, marginTop: 12 }}>Location *</Text>
@@ -121,10 +164,9 @@ export default function BranchCreateScreen({ navigation }) {
             placeholderTextColor={theme.colors.textSecondary}
             value={location}
             onChangeText={setLocation}
-            editable={canCreateWorkspace}
           />
 
-          <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginBottom: 8, marginTop: 12 }}>Branch Manager</Text>
+          <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginBottom: 8, marginTop: 12 }}>Branch Manager Email</Text>
           <TextInput
             style={[
               styles.input,
@@ -134,12 +176,77 @@ export default function BranchCreateScreen({ navigation }) {
                 borderColor: theme.colors.border,
               },
             ]}
-            placeholder="Manager name"
+            placeholder="manager@email.com"
             placeholderTextColor={theme.colors.textSecondary}
-            value={manager}
-            onChangeText={setManager}
-            editable={canCreateWorkspace}
+            value={managerEmail}
+            onChangeText={(value) => {
+              setManagerEmail(value);
+              setSelectedManager(null);
+              setManagerSearchMessage('');
+              setManagerSearchState('idle');
+            }}
+            autoCapitalize="none"
+            keyboardType="email-address"
           />
+          <AppButton
+            title={managerSearchLoading ? 'Checking…' : 'Find Manager'}
+            icon="person-search"
+            variant="secondary"
+            onPress={handleFindManager}
+            loading={managerSearchLoading}
+            style={styles.findManagerButton}
+          />
+          {managerSearchMessage ? (
+            <View style={[
+              styles.searchStatus,
+              {
+                borderColor: managerSearchState === 'success' ? theme.colors.success : theme.colors.error,
+                backgroundColor: managerSearchState === 'success' ? `${theme.colors.success}15` : `${theme.colors.error}15`,
+              },
+            ]}>
+              <MaterialIcons
+                name={managerSearchState === 'success' ? 'check-circle' : 'error'}
+                size={16}
+                color={managerSearchState === 'success' ? theme.colors.success : theme.colors.error}
+              />
+              <Text style={{
+                flex: 1,
+                marginLeft: 8,
+                color: managerSearchState === 'success' ? theme.colors.success : theme.colors.error,
+                fontSize: 12,
+                fontWeight: '600',
+              }}>
+                {managerSearchMessage}
+              </Text>
+            </View>
+          ) : null}
+          {selectedManager ? (
+            <View style={[styles.managerCard, { borderColor: theme.colors.border, backgroundColor: theme.colors.card }]}> 
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>{selectedManager.name}</Text>
+                  <Text style={{ color: theme.colors.textSecondary }}>{selectedManager.email}</Text>
+                </View>
+                <View style={{
+                  borderRadius: 999,
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  backgroundColor: selectedManager.alreadyMember ? `${theme.colors.success}20` : `${theme.colors.warning}20`,
+                }}>
+                  <Text style={{
+                    color: selectedManager.alreadyMember ? theme.colors.success : theme.colors.warning,
+                    fontSize: 11,
+                    fontWeight: '700',
+                  }}>
+                    {selectedManager.alreadyMember ? 'Member' : 'Will be added'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          ) : null}
+          <Text style={{ color: theme.colors.textSecondary, fontSize: 11, marginTop: 6 }}>
+            Manager should already have a BizRecord account and will sign in with their own email and password.
+          </Text>
         </Card>
 
         {/* Contact Information Card */}
@@ -159,7 +266,6 @@ export default function BranchCreateScreen({ navigation }) {
             keyboardType="phone-pad"
             value={phone}
             onChangeText={setPhone}
-            editable={canCreateWorkspace}
           />
 
           <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginBottom: 8, marginTop: 12 }}>Address</Text>
@@ -179,33 +285,18 @@ export default function BranchCreateScreen({ navigation }) {
             onChangeText={setAddress}
             multiline
             numberOfLines={3}
-            editable={canCreateWorkspace}
           />
         </Card>
 
         {/* Submit Button */}
-        <TouchableOpacity
-          style={[
-            styles.submitButton,
-            {
-              backgroundColor: canCreateWorkspace ? theme.colors.primary : theme.colors.border,
-              opacity: loading ? 0.7 : 1,
-            },
-          ]}
+        <AppButton
+          title={loading ? 'Creating…' : 'Create Branch'}
+          icon="add-location-alt"
+          variant="primary"
           onPress={handleCreateBranch}
-          disabled={!canCreateWorkspace || loading}
-        >
-          <MaterialIcons name="add-location-alt" size={20} color={canCreateWorkspace ? '#fff' : theme.colors.textSecondary} />
-          <Text
-            style={{
-              color: canCreateWorkspace ? '#fff' : theme.colors.textSecondary,
-              fontWeight: '600',
-              marginLeft: 8,
-            }}
-          >
-            {loading ? 'Creating…' : 'Create Branch'}
-          </Text>
-        </TouchableOpacity>
+          loading={loading}
+          style={styles.submitButton}
+        />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -225,13 +316,25 @@ const styles = StyleSheet.create({
     height: 100,
     textAlignVertical: 'top',
   },
-  submitButton: {
+  findManagerButton: {
+    marginTop: 10,
+  },
+  managerCard: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+  },
+  searchStatus: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     flexDirection: 'row',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
+  },
+  submitButton: {
     marginTop: 8,
   },
 });

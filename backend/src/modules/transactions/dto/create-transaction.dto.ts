@@ -15,11 +15,13 @@ export class CreateTransactionDto {
   @IsNumber()
   quantity: number;
 
+  @IsOptional()
   @IsNumber()
-  unitPrice: number;
+  unitPrice?: number;
 
+  @IsOptional()
   @IsNumber()
-  totalAmount: number;
+  totalAmount?: number;
 
   @IsOptional()
   @IsString()

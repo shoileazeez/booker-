@@ -6,15 +6,15 @@ import {
   TouchableOpacity,
   StyleSheet,
   Linking,
-  ActivityIndicator,
   Alert,
   useWindowDimensions,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { api } from '../api/client';
 import { cacheDebts, getCachedDebts } from '../storage/offlineStore';
-import { Card, Subtle } from '../components/UI';
+import { Card, Subtle, EmptyState, SkeletonBlock, AppButton } from '../components/UI';
 import { MaterialIcons } from '@expo/vector-icons';
 
 const getDueInfo = (dueDate) => {
@@ -39,9 +39,16 @@ export default function DebtScreen({ navigation }) {
   const [debts, setDebts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [refreshTick, setRefreshTick] = useState(0);
   const isCompact = width < 390;
   const contentWidth = Math.min(width - (isCompact ? 20 : 32), 820);
   const edgePadding = isCompact ? 12 : 16;
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setRefreshTick((prev) => prev + 1);
+    }, []),
+  );
 
   useEffect(() => {
     const loadDebts = async () => {
@@ -74,7 +81,7 @@ export default function DebtScreen({ navigation }) {
     };
 
     loadDebts();
-  }, [currentWorkspaceId]);
+  }, [currentWorkspaceId, refreshTick]);
 
   const sendWhatsApp = (phone, name, amount) => {
     const message = `Hello ${name}, this is a reminder from your shop regarding your balance of ₦${amount.toFixed(
@@ -125,17 +132,16 @@ export default function DebtScreen({ navigation }) {
           {error ? <Text style={[styles.errorText, { color: theme.colors.error }]}>{error}</Text> : null}
           </View>
         </View>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('RecordDebt')}
-          style={[styles.addButton, { backgroundColor: theme.colors.primary }]}
-        >
-          <MaterialIcons name="add" size={18} color="#fff" />
-          <Text style={[styles.addButtonText, { color: '#fff' }]}>Add</Text>
-        </TouchableOpacity>
+        <AppButton title="Add" icon="add" variant="primary" onPress={() => navigation.navigate('RecordDebt')} style={styles.addButton} />
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} size="large" color={theme.colors.primary} />
+        <View style={{ alignSelf: 'center', width: contentWidth, paddingHorizontal: edgePadding, marginTop: 12 }}>
+          <SkeletonBlock height={20} width="45%" />
+          <SkeletonBlock height={76} />
+          <SkeletonBlock height={76} />
+          <SkeletonBlock height={76} />
+        </View>
       ) : (
         <FlatList
           data={debts}
@@ -143,16 +149,18 @@ export default function DebtScreen({ navigation }) {
           contentContainerStyle={{ paddingHorizontal: edgePadding, paddingBottom: 24 }}
           style={{ alignSelf: 'center', width: contentWidth }}
           ListEmptyComponent={() => (
-            <View style={{ alignItems: 'center', marginTop: 40 }}>
-              <Text style={{ color: theme.colors.textSecondary }}>No debts yet.</Text>
-            </View>
+            <EmptyState
+              icon="account-balance-wallet"
+              title="No debts yet"
+              subtitle="Record debt entries to track who owes your business"
+            />
           )}
           renderItem={({ item }) => {
             const dueInfo = getDueInfo(item.dueDate);
             const isPending = item.status === 'pending';
 
             return (
-              <Card style={styles.card}>
+              <Card style={[styles.card, { borderColor: theme.colors.border }]}> 
                 <View style={styles.row}>
                   <View style={styles.info}>
                     <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: isCompact ? 15 : 16 }}>
@@ -165,19 +173,19 @@ export default function DebtScreen({ navigation }) {
                     <Text style={{ color: theme.colors.error, fontWeight: '700' }}>
                       ₦{parseFloat(item.totalAmount).toLocaleString()}
                     </Text>
-                    <TouchableOpacity
+                    <AppButton
+                      title="WhatsApp"
+                      variant="primary"
                       onPress={() => sendWhatsApp(item.phone || '', item.customerName || 'Friend', parseFloat(item.totalAmount))}
-                      style={[styles.whatsappButton, { backgroundColor: '#25D366' }]}
-                    >
-                      <Text style={{ color: '#fff', fontWeight: '700' }}>WhatsApp</Text>
-                    </TouchableOpacity>
+                      style={[styles.whatsappButton, { backgroundColor: '#25D366', borderColor: '#25D366' }]}
+                    />
                     {isPending ? (
-                      <TouchableOpacity
+                      <AppButton
+                        title="Mark Paid"
+                        variant="primary"
                         onPress={() => markAsPaid(item.id)}
-                        style={[styles.payButton, { backgroundColor: theme.colors.success }]}
-                      >
-                        <Text style={{ color: '#fff', fontWeight: '700' }}>Mark Paid</Text>
-                      </TouchableOpacity>
+                        style={[styles.payButton, { backgroundColor: theme.colors.success, borderColor: theme.colors.success }]}
+                      />
                     ) : null}
                   </View>
                 </View>
@@ -211,14 +219,23 @@ const styles = StyleSheet.create({
   },
   errorText: { marginTop: 8 },
   addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 10,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  addButtonText: { fontWeight: '700', marginLeft: 6 },
-  card: { marginBottom: 12 },
+  card: {
+    marginBottom: 12,
+    borderWidth: 1,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   info: { flex: 1 },
   amountContainer: { alignItems: 'flex-end', marginLeft: 12, maxWidth: '45%' },

@@ -1,21 +1,34 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { Card, Subtle } from '../../components/UI';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import { Card, Subtle, EmptyState, SkeletonBlock } from '../../components/UI';
 import { useTheme } from '../../theme/ThemeContext';
+import { useWorkspace } from '../../context/WorkspaceContext';
 import { MaterialIcons } from '@expo/vector-icons';
 import { api } from '../../api/client';
 
 export default function BranchListScreen({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
+  const { currentWorkspaceId } = useWorkspace();
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const formatBranchDate = (dateValue) => {
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return 'Unknown date';
+    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
   useEffect(() => {
     const loadBranches = async () => {
+      if (!currentWorkspaceId) {
+        setBranches([]);
+        return;
+      }
+
       setLoading(true);
       try {
-        const data = await api.get('/workspaces');
+        const data = await api.get(`/workspaces/${currentWorkspaceId}/branches`);
         setBranches(Array.isArray(data) ? data : []);
       } catch (err) {
         setBranches([]);
@@ -25,7 +38,7 @@ export default function BranchListScreen({ navigation }) {
     };
 
     loadBranches();
-  }, []);
+  }, [currentWorkspaceId]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -42,7 +55,12 @@ export default function BranchListScreen({ navigation }) {
         </TouchableOpacity>
       </View>
       {loading ? (
-        <ActivityIndicator size="large" color={theme.colors.primary} style={{ marginTop: 20 }} />
+        <View style={{ padding: 12 }}>
+          <SkeletonBlock height={18} width="40%" />
+          <SkeletonBlock height={66} />
+          <SkeletonBlock height={66} />
+          <SkeletonBlock height={66} />
+        </View>
       ) : (
         <FlatList
           data={branches}
@@ -50,21 +68,23 @@ export default function BranchListScreen({ navigation }) {
           contentContainerStyle={{ padding: 12 }}
           renderItem={({ item }) => (
             <Card>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <View>
-                  <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>{item.name}</Text>
-                  <Subtle>{item.status || 'active'} {new Date(item.createdAt).toLocaleDateString()}</Subtle>
-                </View>
-                <TouchableOpacity>
-                  <Text style={{ color: theme.colors.primary }}>Manage</Text>
-                </TouchableOpacity>
+              <View>
+                <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: 16 }}>{item.name}</Text>
+                <Subtle>{`${item.status || 'active'} • ${formatBranchDate(item.createdAt)}`}</Subtle>
+                <Text style={{ color: theme.colors.textSecondary, marginTop: 6, fontSize: 12 }}>
+                  {item.managerUser?.name
+                    ? `Manager: ${item.managerUser.name} (${item.managerUser.email})`
+                    : 'Manager: Not assigned'}
+                </Text>
               </View>
             </Card>
           )}
           ListEmptyComponent={() => (
-            <View style={{ padding: 20 }}>
-              <Subtle>No branches yet</Subtle>
-            </View>
+            <EmptyState
+              icon="account-tree"
+              title="No branches yet"
+              subtitle="Create a branch to manage stores under this workspace"
+            />
           )}
         />
       )}
