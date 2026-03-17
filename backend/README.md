@@ -1,98 +1,203 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# BizRecord – Backend API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A RESTful API built with **NestJS**, **TypeScript**, and **PostgreSQL** that powers the BizRecord bookkeeping and inventory management app.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## Table of Contents
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Database Configuration](#database-configuration)
+- [Running the Server](#running-the-server)
+- [API Endpoints](#api-endpoints)
+- [Running Tests](#running-tests)
+- [Database Migrations](#database-migrations)
+- [Environment Variables Reference](#environment-variables-reference)
 
-## Project setup
+---
 
-```bash
-$ npm install
-```
+## Prerequisites
 
-## Compile and run the project
+- Node.js v18+
+- npm v8+
+- PostgreSQL v12+
+
+---
+
+## Installation
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+cd backend
+npm install
+cp .env.example .env
+# Edit .env with your settings
 ```
 
-## Run tests
+---
+
+## Database Configuration
+
+The backend supports **two ways** to provide database connection details.
+
+### Option 1 – Connection URL (recommended for cloud deployments)
+
+Set the `DATABASE_URL` environment variable to a full PostgreSQL connection string:
+
+```env
+DATABASE_URL=postgresql://user:password@host:5432/booker_db
+```
+
+This is the format used by most managed database services (Heroku, Railway, Render, Supabase, etc.). When `DATABASE_URL` is present it takes priority over the individual parameters below.
+
+### Option 2 – Individual parameters
+
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_USERNAME=postgres
+DB_PASSWORD=yourpassword
+DB_NAME=booker_db
+```
+
+Both options are shown in [.env.example](.env.example).
+
+### SSL / TLS
+
+Many managed cloud databases (Railway, Render, Supabase, Heroku, etc.) require encrypted connections. If you see a **`SSL/TLS required`** error, add the following to your `.env`:
+
+```env
+DB_SSL=true
+```
+
+This works for both the `DATABASE_URL` and individual-parameter connection methods. By default, certificate validation is **enabled** (`rejectUnauthorized: true`), which is the secure setting and works with most managed databases that have CA-signed certificates.
+
+If your provider uses **self-signed certificates** and you see a certificate validation error, you can additionally set:
+
+```env
+DB_SSL_REJECT_UNAUTHORIZED=false
+```
+
+> **Security note:** `DB_SSL_REJECT_UNAUTHORIZED=false` disables certificate chain validation and makes the connection susceptible to man-in-the-middle attacks. Only use it when your provider cannot supply a trusted CA bundle and you have accepted this risk.
+
+---
+
+## Running the Server
 
 ```bash
-# unit tests
-$ npm run test
+# Development (auto-reload)
+npm run start:dev
 
-# e2e tests
-$ npm run test:e2e
+# Debug mode
+npm run start:debug
 
-# test coverage
-$ npm run test:cov
+# Production (build first)
+npm run build
+npm run start:prod
 ```
 
-## Deployment
+The API listens on `http://localhost:3000` by default (configure with `PORT`).
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+---
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## API Endpoints
+
+### Auth
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/auth/register` | Register a new user |
+| POST | `/auth/login` | Log in and receive a JWT |
+
+### Workspaces
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/workspaces` | List all workspaces for the logged-in user |
+| POST | `/workspaces` | Create a workspace |
+| GET | `/workspaces/:id` | Get a workspace |
+| PATCH | `/workspaces/:id` | Update a workspace |
+| DELETE | `/workspaces/:id` | Delete a workspace |
+
+### Inventory
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/inventory` | List inventory items |
+| POST | `/inventory` | Create an inventory item |
+| GET | `/inventory/:id` | Get an item |
+| PATCH | `/inventory/:id` | Update an item |
+| DELETE | `/inventory/:id` | Delete an item |
+
+### Transactions
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/transactions` | List transactions |
+| POST | `/transactions` | Record a transaction |
+| GET | `/transactions/:id` | Get a transaction |
+| PATCH | `/transactions/:id` | Update a transaction |
+| DELETE | `/transactions/:id` | Delete a transaction |
+
+All protected routes require the `Authorization: Bearer <token>` header.
+
+---
+
+## Running Tests
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# Unit tests
+npm run test
+
+# Unit tests in watch mode
+npm run test:watch
+
+# Coverage report
+npm run test:cov
+
+# End-to-end tests
+npm run test:e2e
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+---
 
-## Resources
+## Database Migrations
 
-Check out a few resources that may come in handy when working with NestJS:
+```bash
+# Run pending migrations
+npm run migration:run
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+# Revert the last migration
+npm run migration:revert
 
-## Support
+# Generate a migration from entity changes
+npm run migration:generate -- --name=DescriptiveName
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+# Create a blank migration
+npm run migration:create -- --name=DescriptiveName
+```
 
-## Stay in touch
+Migrations run automatically on application startup in non-production environments.
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+---
 
-## License
+## Environment Variables Reference
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URL` | No* | – | Full PostgreSQL connection URL. Takes priority over individual DB_* vars. |
+| `DB_HOST` | No* | `localhost` | Database host |
+| `DB_PORT` | No* | `5432` | Database port |
+| `DB_USERNAME` | No* | `postgres` | Database user |
+| `DB_PASSWORD` | No* | `password` | Database password |
+| `DB_NAME` | No* | `booker_db` | Database name |
+| `DB_SSL` | No* | `false` | Set to `true` to enable SSL/TLS (required by most managed cloud databases) |
+| `DB_SSL_REJECT_UNAUTHORIZED` | No | `true` | Set to `false` to allow self-signed certificates (disables cert validation – use with caution) |
+| `JWT_SECRET` | **Yes** | – | Secret key for signing JWT tokens |
+| `JWT_EXPIRES_IN` | No | `24h` | JWT expiry duration |
+| `PORT` | No | `3000` | Port the server listens on |
+| `NODE_ENV` | No | `development` | `development` \| `production` |
+| `CORS_ORIGIN` | No | `*` | Comma-separated list of allowed CORS origins |
+
+\* Either `DATABASE_URL` **or** all of `DB_HOST` / `DB_PORT` / `DB_USERNAME` / `DB_PASSWORD` / `DB_NAME` must be provided.
+
