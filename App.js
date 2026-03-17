@@ -7,6 +7,7 @@ import { ThemeProvider } from './src/theme/ThemeContext';
 import { WorkspaceProvider, useWorkspace } from './src/context/WorkspaceContext';
 import MainTabs from './src/navigation/MainTabs';
 import AuthStack from './src/navigation/AuthStack';
+import ReAuthStack from './src/navigation/ReAuthStack';
 import WorkspaceSetupScreen from './src/screens/workspace/WorkspaceSetupScreen';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { initDb } from './src/storage/sqlite';
@@ -14,10 +15,10 @@ import { initDb } from './src/storage/sqlite';
 const Stack = createNativeStackNavigator();
 
 function RootNavigator() {
-  const { user, loading } = useAuth();
+  const { user, loading, requiresReAuth } = useAuth();
   const { workspaces, loading: loadingWorkspaces } = useWorkspace();
 
-  if (loading || (user && loadingWorkspaces)) {
+  if (loading || (user && loadingWorkspaces && !requiresReAuth)) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
         <ActivityIndicator size="large" />
@@ -29,6 +30,8 @@ function RootNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {!user ? (
         <Stack.Screen name="Auth" component={AuthStack} />
+      ) : requiresReAuth ? (
+        <Stack.Screen name="ReAuthFlow" component={ReAuthStack} />
       ) : workspaces.length === 0 ? (
         <Stack.Screen name="WorkspaceSetup" component={WorkspaceSetupScreen} />
       ) : (

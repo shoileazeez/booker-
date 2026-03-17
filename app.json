@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F3F7F5"
+      "backgroundColor": "#031f38"
     },
     "platforms": [
       "ios",
@@ -29,7 +29,7 @@
       "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#031f38"
       },
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -56,13 +56,13 @@
     "privacy": "https://example.com/privacy",
     "primaryColor": "#00A676",
     "androidStatusBar": {
-      "backgroundColor": "#F3F7F5",
-      "barStyle": "dark-content"
+      "backgroundColor": "#031f38",
+      "barStyle": "light-content"
     },
     "backgroundColor": "#ffffff",
     "plugins": [],
     "extra": {
-      "apiUrl": "https://booker-yeqh.onrender.com",
+      "apiUrl": "https://bizrecord-kk4y2.ondigitalocean.app",
       "eas": {
         "projectId": "595d2e24-df5b-4d3b-b308-7c45a082711b"
       }

@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, setAuthToken } from '../api/client';
 
@@ -9,6 +10,14 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [requiresReAuth, setRequiresReAuth] = useState(false);
+  const appStateRef = useRef(AppState.currentState);
+  const userRef = useRef(null);
+
+  // Keep userRef in sync so AppState listener can access it without stale closure
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   const saveAuth = async (newToken, userData) => {
     try {
@@ -20,6 +29,7 @@ export const AuthProvider = ({ children }) => {
     setAuthToken(newToken);
     setToken(newToken);
     setUser(userData);
+    setRequiresReAuth(false);
   };
 
   const clearAuth = async () => {
@@ -31,6 +41,7 @@ export const AuthProvider = ({ children }) => {
     setAuthToken(null);
     setToken(null);
     setUser(null);
+    setRequiresReAuth(false);
   };
 
   const register = async (registerDto) => {
@@ -49,6 +60,12 @@ export const AuthProvider = ({ children }) => {
     return userData;
   };
 
+  // Re-authenticate using the stored user's email + a new password entry
+  const unlockSession = async (password) => {
+    if (!userRef.current?.email) throw new Error('No user session found');
+    return login(userRef.current.email, password);
+  };
+
   const logout = () => {
     clearAuth();
   };
@@ -62,6 +79,8 @@ export const AuthProvider = ({ children }) => {
           setAuthToken(storedToken);
           setToken(storedToken);
           setUser(storedUser);
+          // Any restored session must re-authenticate before accessing app data.
+          setRequiresReAuth(true);
         }
       }
     } catch (error) {
@@ -74,8 +93,21 @@ export const AuthProvider = ({ children }) => {
     restoreAuth();
   }, []);
 
+  // Lock the session whenever the app is resumed from background
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const prev = appStateRef.current;
+      appStateRef.current = nextState;
+      const wasBackgrounded = typeof prev === 'string' && /(inactive|background)/.test(prev);
+      if (wasBackgrounded && nextState === 'active' && userRef.current) {
+        setRequiresReAuth(true);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout, register }}>
+    <AuthContext.Provider value={{ user, token, loading, requiresReAuth, login, logout, register, unlockSession }}>
       {children}
     </AuthContext.Provider>
   );
