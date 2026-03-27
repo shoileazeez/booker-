@@ -5,6 +5,20 @@ export class AddWorkspaceInviteAcceptanceFields1710880000000 implements Migratio
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS "workspace_invites" (
+        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "email" character varying NOT NULL,
+        "userId" uuid,
+        "workspace_id" uuid NOT NULL,
+        "status" character varying NOT NULL DEFAULT 'pending',
+        "role" character varying,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT now(),
+        CONSTRAINT "PK_workspace_invites_id" PRIMARY KEY ("id"),
+        CONSTRAINT "FK_workspace_invites_workspace" FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE NO ACTION
+      )
+    `);
+
+    await queryRunner.query(`
       ALTER TABLE "workspace_invites"
       ADD COLUMN IF NOT EXISTS "invite_code" character varying
     `);
