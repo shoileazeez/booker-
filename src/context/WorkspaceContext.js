@@ -2,6 +2,7 @@
 let syncWorkerActive = false;
 const BACKOFF_BASE_MS = 1500;
 const MAX_RETRIES = 5;
+const isLocalEntityId = (value) => typeof value === 'string' && value.startsWith('local_');
 
 async function syncCoordinatorWorker({ token, currentWorkspaceId }) {
   if (syncWorkerActive) return;
@@ -37,6 +38,7 @@ async function syncCoordinatorWorker({ token, currentWorkspaceId }) {
       try {
         const payload = action.payload ? JSON.parse(action.payload) : undefined;
         let apiRes = null;
+        let syncPayload = payload;
         // --- Conflict detection for update/delete ---
         let entityType = null;
         let serverId = null;
@@ -80,44 +82,51 @@ async function syncCoordinatorWorker({ token, currentWorkspaceId }) {
         }
         // --- Normal sync logic ---
         if (action.action_type === 'create_workspace') {
-          apiRes = await api.post('/workspaces', payload);
+          apiRes = await api.post('/workspaces', syncPayload);
           if (apiRes?.id) {
             await offlineStore.setIdMapping('workspace', action.entity_local_id, apiRes.id);
           }
         } else if (action.action_type === 'create_inventory') {
-          apiRes = await api.post(`/workspaces/${workspaceId}/inventory`, payload);
+          apiRes = await api.post(`/workspaces/${workspaceId}/inventory`, syncPayload);
           if (apiRes?.id) {
             await offlineStore.setIdMapping('inventory', action.entity_local_id, apiRes.id);
           }
         } else if (action.action_type === 'update_inventory') {
-          apiRes = await api.put(`/workspaces/${workspaceId}/inventory/${serverId}`, payload);
+          apiRes = await api.put(`/workspaces/${workspaceId}/inventory/${serverId}`, syncPayload);
         } else if (action.action_type === 'delete_inventory') {
           apiRes = await api.delete(`/workspaces/${workspaceId}/inventory/${serverId}`);
         } else if (action.action_type === 'create_transaction') {
-          apiRes = await api.post(`/workspaces/${workspaceId}/transactions`, payload);
+          if (isLocalEntityId(syncPayload?.itemId)) {
+            const mappedItemId = await offlineStore.getServerId('inventory', syncPayload.itemId);
+            if (!mappedItemId) {
+              throw new Error('Selected inventory item has not synced yet');
+            }
+            syncPayload = { ...syncPayload, itemId: mappedItemId };
+          }
+          apiRes = await api.post(`/workspaces/${workspaceId}/transactions`, syncPayload);
           if (apiRes?.id) {
             await offlineStore.setIdMapping('transaction', action.entity_local_id, apiRes.id);
           }
         } else if (action.action_type === 'update_transaction') {
-          apiRes = await api.put(`/workspaces/${workspaceId}/transactions/${serverId}`, payload);
+          apiRes = await api.put(`/workspaces/${workspaceId}/transactions/${serverId}`, syncPayload);
         } else if (action.action_type === 'delete_transaction') {
           apiRes = await api.delete(`/workspaces/${workspaceId}/transactions/${serverId}`);
         } else if (action.action_type === 'create_debt') {
-          apiRes = await api.post(`/workspaces/${workspaceId}/transactions`, payload);
+          apiRes = await api.post(`/workspaces/${workspaceId}/transactions`, syncPayload);
           if (apiRes?.id) {
             await offlineStore.setIdMapping('debt', action.entity_local_id, apiRes.id);
           }
         } else if (action.action_type === 'update_debt') {
-          apiRes = await api.put(`/workspaces/${workspaceId}/transactions/${serverId}`, payload);
+          apiRes = await api.put(`/workspaces/${workspaceId}/transactions/${serverId}`, syncPayload);
         } else if (action.action_type === 'delete_debt') {
           apiRes = await api.delete(`/workspaces/${workspaceId}/transactions/${serverId}`);
         } else if (action.action_type === 'create_customer') {
-          apiRes = await api.post(`/workspaces/${workspaceId}/customers`, payload);
+          apiRes = await api.post(`/workspaces/${workspaceId}/customers`, syncPayload);
           if (apiRes?.id) {
             await offlineStore.setIdMapping('customer', action.entity_local_id, apiRes.id);
           }
         } else if (action.action_type === 'update_customer') {
-          apiRes = await api.put(`/workspaces/${workspaceId}/customers/${serverId}`, payload);
+          apiRes = await api.put(`/workspaces/${workspaceId}/customers/${serverId}`, syncPayload);
         } else if (action.action_type === 'delete_customer') {
           apiRes = await api.delete(`/workspaces/${workspaceId}/customers/${serverId}`);
         }
@@ -127,7 +136,7 @@ async function syncCoordinatorWorker({ token, currentWorkspaceId }) {
             const entityTypeForCreate =
               action.entity_type === 'debt' ? 'debt' : action.entity_type;
             const localRow = await offlineStore.getLocalRow(entityTypeForCreate, action.entity_local_id);
-            const currentData = localRow?.data ? JSON.parse(localRow.data) : payload || {};
+            const currentData = localRow?.data ? JSON.parse(localRow.data) : syncPayload || {};
             const upsertByType = {
               inventory: offlineStore.upsertLocalInventory,
               transaction: offlineStore.upsertLocalTransaction,
@@ -139,7 +148,7 @@ async function syncCoordinatorWorker({ token, currentWorkspaceId }) {
                 local_id: action.entity_local_id,
                 server_id: String(apiRes.id),
                 workspace_server_id: workspaceId,
-                data: { ...currentData, ...apiRes, id: apiRes.id, local_id: action.entity_local_id },
+                data: { ...currentData, ...syncPayload, ...apiRes, id: apiRes.id, local_id: action.entity_local_id },
                 sync_status: 'synced',
                 updated_at_local: Date.now(),
               }, workspaceId);
@@ -422,6 +431,9 @@ export const WorkspaceProvider = function({ children }) {
 
       if (action.method === 'post') {
         const localId = generateLocalId(actionPrefix);
+        const dependsOnActionId = entityType === 'transaction' && isLocalEntityId(action?.body?.itemId)
+          ? action.body.itemId
+          : null;
         const upsert = entityType === 'debt' ? offlineStore.upsertLocalDebt : offlineStore.upsertLocalTransaction;
         await upsert({
           local_id: localId,
@@ -438,6 +450,7 @@ export const WorkspaceProvider = function({ children }) {
           entity_local_id: localId,
           workspace_ref: workspaceRef,
           payload: action.body || {},
+          depends_on_action_id: dependsOnActionId,
           created_at: now,
           updated_at: now,
         });

@@ -47,7 +47,9 @@ export class Workspace {
   @Column({ name: 'parent_workspace_id', nullable: true })
   parentWorkspaceId: string | null;
 
-  @ManyToOne(() => Workspace, (workspace) => workspace.branches, { nullable: true })
+  @ManyToOne(() => Workspace, (workspace) => workspace.branches, {
+    nullable: true,
+  })
   @JoinColumn({ name: 'parent_workspace_id' })
   parentWorkspace: Workspace | null;
 

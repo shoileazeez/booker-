@@ -16,13 +16,18 @@ export class PushService {
 
   async sendPush(input: PushNotificationInput): Promise<void> {
     // Example: Integrate with Firebase Cloud Messaging (FCM) or other provider
-    const enabled = (this.configService.get<string>('PUSH_ENABLED') || 'true') === 'true';
+    const enabled =
+      (this.configService.get<string>('PUSH_ENABLED') || 'true') === 'true';
     if (!enabled) {
-      this.logger.log(`PUSH_ENABLED=false. Skipping push notification to ${input.to}`);
+      this.logger.log(
+        `PUSH_ENABLED=false. Skipping push notification to ${input.to}`,
+      );
       return;
     }
     // TODO: Integrate with actual push provider (e.g., FCM, OneSignal)
-    this.logger.log(`Push notification sent to ${input.to}: ${input.title} - ${input.body}`);
+    this.logger.log(
+      `Push notification sent to ${input.to}: ${input.title} - ${input.body}`,
+    );
     // Simulate async send
     return;
   }

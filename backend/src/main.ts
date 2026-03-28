@@ -6,7 +6,10 @@ async function bootstrap() {
   // Allow connections from the mobile app / other clients (CORS)
   const corsOrigin = process.env.CORS_ORIGIN;
   const origin = corsOrigin
-    ? corsOrigin.split(',').map((o) => o.trim()).filter(Boolean)
+    ? corsOrigin
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean)
     : true;
   app.enableCors({ origin });
 

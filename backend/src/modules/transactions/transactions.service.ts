@@ -1,11 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { isUUID } from 'class-validator';
 import { Transaction } from './entities/transaction.entity';
 import { Workspace } from '../workspace/entities/workspace.entity';
 import { User } from '../auth/entities/user.entity';
 import { InventoryItem } from '../inventory/entities/inventory-item.entity';
-
 
 import { ReceiptService } from './receipt.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
@@ -50,7 +54,14 @@ export class TransactionsService {
 
     if (createTransactionDto.type === 'sale') {
       if (!createTransactionDto.itemId) {
-        throw new BadRequestException('itemId is required for sale transactions');
+        throw new BadRequestException(
+          'itemId is required for sale transactions',
+        );
+      }
+      if (!isUUID(createTransactionDto.itemId)) {
+        throw new BadRequestException(
+          'itemId must be a valid inventory item id',
+        );
       }
 
       item = await this.itemsRepository.findOne({
@@ -62,7 +73,9 @@ export class TransactionsService {
       });
 
       if (!item) {
-        throw new NotFoundException('Selected item not found in this workspace');
+        throw new NotFoundException(
+          'Selected item not found in this workspace',
+        );
       }
 
       quantity = Number(createTransactionDto.quantity || 0);
@@ -72,7 +85,9 @@ export class TransactionsService {
 
       const currentStock = Number(item.quantity || 0);
       if (quantity > currentStock) {
-        throw new BadRequestException(`Insufficient stock. Available: ${currentStock}`);
+        throw new BadRequestException(
+          `Insufficient stock. Available: ${currentStock}`,
+        );
       }
 
       unitPrice = Number(item.sellingPrice || 0);
@@ -95,7 +110,9 @@ export class TransactionsService {
       customerName: createTransactionDto.customerName,
       phone: createTransactionDto.phone,
       notes: createTransactionDto.notes,
-      ...(createTransactionDto.dueDate && { dueDate: new Date(createTransactionDto.dueDate) }),
+      ...(createTransactionDto.dueDate && {
+        dueDate: new Date(createTransactionDto.dueDate),
+      }),
       workspace,
       createdBy: user,
     });
@@ -105,12 +122,12 @@ export class TransactionsService {
     // Generate and upload receipt for sales
     if (transaction && transaction.type === 'sale') {
       try {
-        const receiptUrl = await this.receiptService.generateAndUploadReceipt(transaction);
+        const receiptUrl =
+          await this.receiptService.generateAndUploadReceipt(transaction);
         transaction.receiptUrl = receiptUrl;
         await this.transactionsRepository.save(transaction);
-      } catch (err) {
+      } catch {
         // Optionally log error, but don't block transaction creation
-        // console.error('Failed to generate/upload receipt:', err);
       }
     }
     return transaction;
@@ -168,7 +185,8 @@ export class TransactionsService {
     });
 
     const filteredByDate = transactions.filter(
-      (t) => new Date(t.createdAt) >= startDate && new Date(t.createdAt) <= endDate
+      (t) =>
+        new Date(t.createdAt) >= startDate && new Date(t.createdAt) <= endDate,
     );
 
     const sales = filteredByDate

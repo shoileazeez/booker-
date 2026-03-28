@@ -12,7 +12,18 @@ import { InventoryItem } from '../inventory/entities/inventory-item.entity';
 import { WorkspaceMembership } from './entities/workspace-membership.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Workspace, User, WorkspaceInvite, WorkspaceMembership, Transaction, InventoryItem]), BillingModule, NotificationsModule],
+  imports: [
+    TypeOrmModule.forFeature([
+      Workspace,
+      User,
+      WorkspaceInvite,
+      WorkspaceMembership,
+      Transaction,
+      InventoryItem,
+    ]),
+    BillingModule,
+    NotificationsModule,
+  ],
   providers: [WorkspaceService],
   controllers: [WorkspaceController],
   exports: [WorkspaceService],

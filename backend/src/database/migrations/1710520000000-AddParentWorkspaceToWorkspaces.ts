@@ -34,8 +34,14 @@ export class AddParentWorkspaceToWorkspaces1710520000000 implements MigrationInt
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_workspaces_parent_workspace_id"');
-    await queryRunner.query('ALTER TABLE "workspaces" DROP CONSTRAINT IF EXISTS "FK_workspaces_parent_workspace"');
-    await queryRunner.query('ALTER TABLE "workspaces" DROP COLUMN IF EXISTS "parent_workspace_id"');
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_workspaces_parent_workspace_id"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "workspaces" DROP CONSTRAINT IF EXISTS "FK_workspaces_parent_workspace"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "workspaces" DROP COLUMN IF EXISTS "parent_workspace_id"',
+    );
   }
 }

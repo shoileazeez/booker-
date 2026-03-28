@@ -48,7 +48,9 @@ export class InventoryItem {
   @Column({ default: 'available' })
   status: 'available' | 'out_of_stock' | 'discontinued';
 
-  @ManyToOne(() => Workspace, (workspace) => workspace.items, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Workspace, (workspace) => workspace.items, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'workspace_id' })
   workspace: Workspace;
 

@@ -9,7 +9,10 @@ import { Payment } from './entities/payment.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, Workspace, Subscription, Payment]), NotificationsModule],
+  imports: [
+    TypeOrmModule.forFeature([User, Workspace, Subscription, Payment]),
+    NotificationsModule,
+  ],
   controllers: [BillingController],
   providers: [BillingService],
   exports: [BillingService],

@@ -34,8 +34,14 @@ export class AddManagerUserToWorkspaces1710620000000 implements MigrationInterfa
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_workspaces_manager_user_id"');
-    await queryRunner.query('ALTER TABLE "workspaces" DROP CONSTRAINT IF EXISTS "FK_workspaces_manager_user"');
-    await queryRunner.query('ALTER TABLE "workspaces" DROP COLUMN IF EXISTS "manager_user_id"');
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_workspaces_manager_user_id"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "workspaces" DROP CONSTRAINT IF EXISTS "FK_workspaces_manager_user"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "workspaces" DROP COLUMN IF EXISTS "manager_user_id"',
+    );
   }
 }

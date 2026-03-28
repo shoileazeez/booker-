@@ -1,16 +1,12 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, useWindowDimensions } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, useWindowDimensions, Linking, Alert } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { api } from '../api/client';
-import { cacheTransactions, getCachedTransactions } from '../storage/offlineStore';
+import { cacheTransactions } from '../storage/offlineStore';
 import { Card, Subtle, EmptyState, SkeletonBlock, AppButton } from '../components/UI';
-import { Linking, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { FontAwesome } from '@expo/vector-icons';
-
-
 
 export default function SalesScreen({ navigation }) {
   const { theme } = useTheme();
@@ -25,7 +21,19 @@ export default function SalesScreen({ navigation }) {
   const contentWidth = Math.min(width - 24, 860);
   const listPadding = width < 390 ? 12 : 16;
 
-  // Local-first list rendering with pending overlay
+  const normalizeWhatsAppNumber = (phone) => {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (!digits) return null;
+    if (digits.startsWith('00')) return digits.slice(2);
+    if (digits.startsWith('234') && digits.length >= 13 && digits.length <= 15) return digits;
+    if (digits.length === 11 && digits.startsWith('0')) return `234${digits.slice(1)}`;
+    if (digits.length === 10) return `234${digits}`;
+    if (digits.length >= 8 && digits.length <= 15) return digits;
+    return null;
+  };
+
+  const formatCurrency = (value) => `₦${Number(value || 0).toLocaleString()}`;
+
   const loadSales = useCallback(async () => {
     if (!workspace.currentWorkspaceId) {
       setSales([]);
@@ -35,21 +43,24 @@ export default function SalesScreen({ navigation }) {
     setLoading(true);
     setError(null);
     try {
-      // Always read from local repo first
       const localRows = await repo.getTransactions();
-      let localList = [];
+      const localList = [];
       if (localRows?.rows?.length > 0) {
-        for (let i = 0; i < localRows.rows.length; i++) {
+        for (let i = 0; i < localRows.rows.length; i += 1) {
           const row = localRows.rows.item(i);
           const data = row.data ? JSON.parse(row.data) : {};
-          if (data.type === 'sale') {
-            localList.push({ ...data, local_id: row.local_id, sync_status: row.sync_status });
+          if (String(data.type || '').toLowerCase() === 'sale') {
+            localList.push({
+              ...data,
+              id: data.id ?? row.server_id ?? row.local_id,
+              local_id: row.local_id,
+              sync_status: row.sync_status,
+            });
           }
         }
       }
       setSales(localList);
 
-      // Optionally, fetch remote and update local cache if online
       try {
         const data = await api.get(`/workspaces/${workspace.currentWorkspaceId}/transactions`, {
           type: 'sale',
@@ -58,8 +69,8 @@ export default function SalesScreen({ navigation }) {
         const list = Array.isArray(data) ? data : [];
         setSales(list);
         cacheTransactions(workspace.currentWorkspaceId, 'sale', list).catch(() => null);
-      } catch (err) {
-        // Ignore fetch error, stay local
+      } catch {
+        // Stay on local snapshot when remote fetch fails.
       }
     } catch (err) {
       setError('Unable to load sales');
@@ -67,28 +78,29 @@ export default function SalesScreen({ navigation }) {
       setLoading(false);
     }
   }, [workspace.currentWorkspaceId, repo]);
-  
+
   const sendWhatsAppReceipt = (phone, name, receiptUrl) => {
-    if (!phone) {
-      Alert.alert('No phone number', 'No customer phone number available for WhatsApp receipt.');
+    const normalizedPhone = normalizeWhatsAppNumber(phone);
+    if (!normalizedPhone) {
+      Alert.alert('Invalid phone number', 'Use a valid customer number with country code or a local mobile number.');
       return;
     }
+
     const message = `Hello ${name}, here is your sales receipt.\n${receiptUrl ? `View/download: ${receiptUrl}` : ''}`;
     const encoded = encodeURIComponent(message);
-    const url = `https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encoded}`;
+    const url = `https://wa.me/${normalizedPhone}?text=${encoded}`;
     Linking.openURL(url).catch(() => {
       Alert.alert('Unable to open WhatsApp', 'Please ensure WhatsApp is installed.');
     });
   };
 
-  // Add sync status badge to each row (Not synced, Syncing, Failed) and retry button for failed
   const renderSyncBadge = (item) => {
     if (item.sync_status === 'pending_create' || item.sync_status === 'pending_update') {
-      return <Text style={{ color: '#FFA500', fontSize: 11, marginLeft: 6 }}>Not synced</Text>;
+      return <Text style={{ color: '#FFA500', fontSize: 11, marginTop: 6 }}>Not synced</Text>;
     }
     if (item.sync_status === 'failed') {
       return (
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 6 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
           <Text style={{ color: '#E53935', fontSize: 11 }}>Failed</Text>
           <TouchableOpacity
             onPress={() => handleRetrySync(item)}
@@ -103,7 +115,6 @@ export default function SalesScreen({ navigation }) {
     return null;
   };
 
-  // Row-level retry for failed syncs
   const handleRetrySync = async (item) => {
     if (!workspace.queueAction || !workspace.currentWorkspaceId) return;
     try {
@@ -132,9 +143,21 @@ export default function SalesScreen({ navigation }) {
     }, [loadSales]),
   );
 
+  const salesSummary = useMemo(() => {
+    const totalAmount = sales.reduce((sum, item) => sum + Number(item?.totalAmount || 0), 0);
+    const totalQuantity = sales.reduce((sum, item) => sum + Number(item?.quantity || 0), 0);
+    const pendingSync = sales.filter((item) => item?.sync_status && item.sync_status !== 'synced').length;
+    return {
+      totalAmount,
+      totalQuantity,
+      count: sales.length,
+      pendingSync,
+    };
+  }, [sales]);
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}> 
-      <View style={[styles.pageHeader, { alignSelf: 'center', width: contentWidth, paddingHorizontal: listPadding }]}> 
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <View style={[styles.pageHeader, { alignSelf: 'center', width: contentWidth, paddingHorizontal: listPadding }]}>
         <TouchableOpacity
           onPress={() => {
             if (navigation.canGoBack()) navigation.goBack();
@@ -159,6 +182,19 @@ export default function SalesScreen({ navigation }) {
         </View>
       ) : null}
 
+      {!loading ? (
+        <View style={{ alignSelf: 'center', width: contentWidth, paddingHorizontal: listPadding, marginBottom: 12 }}>
+          <Card style={{ marginTop: 6 }}>
+            <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', marginBottom: 6 }}>Sales overview</Text>
+            <Subtle>{salesSummary.count} record(s) • {salesSummary.totalQuantity} item(s) sold</Subtle>
+            <Subtle style={{ marginTop: 4 }}>Revenue: {formatCurrency(salesSummary.totalAmount)}</Subtle>
+            {salesSummary.pendingSync > 0 ? (
+              <Subtle style={{ marginTop: 4 }}>{salesSummary.pendingSync} sale record(s) waiting to sync</Subtle>
+            ) : null}
+          </Card>
+        </View>
+      ) : null}
+
       {loading ? (
         <View style={{ alignSelf: 'center', width: contentWidth, paddingHorizontal: listPadding, marginTop: 12 }}>
           <SkeletonBlock height={20} width="40%" style={{ marginBottom: 12 }} />
@@ -172,30 +208,31 @@ export default function SalesScreen({ navigation }) {
           keyExtractor={(item, index) => (item?.id ? String(item.id) : `sale-${index}`)}
           contentContainerStyle={{ paddingHorizontal: listPadding, paddingBottom: 20 }}
           style={{ alignSelf: 'center', width: contentWidth }}
-          ListEmptyComponent={
+          ListEmptyComponent={(
             <EmptyState
               icon="receipt-long"
               title="No sales yet"
               subtitle="Record a sale to start tracking sold goods"
               style={{ marginTop: 24 }}
             />
-          }
+          )}
           renderItem={({ item }) => (
-            <Card style={[styles.itemCard, { marginBottom: 14 }]}> 
+            <Card style={[styles.itemCard, { marginBottom: 14 }]}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <View style={{ flex: 1, paddingRight: 8 }}>
                   <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>
                     {item.customerName || 'Walk-in customer'}
                   </Text>
-                  <Subtle>{new Date(item.createdAt).toLocaleString()}</Subtle>
-                  <Subtle>Qty: {Number(item.quantity || 0)} • Unit: ₦{Number(item.unitPrice || 0).toLocaleString()}</Subtle>
-                  {item.phone ? (
-                    <Subtle>Phone: {item.phone}</Subtle>
-                  ) : null}
+                  <Subtle>{new Date(item.createdAt || Date.now()).toLocaleString()}</Subtle>
+                  <Subtle>Qty: {Number(item.quantity || 0)} • Unit: {formatCurrency(item.unitPrice)}</Subtle>
+                  <Subtle>Total: {formatCurrency(item.totalAmount)} • {item.paymentMethod || 'cash'}</Subtle>
+                  {item.phone ? <Subtle>Phone: {item.phone}</Subtle> : null}
+                  {item.notes ? <Subtle>Note: {item.notes}</Subtle> : null}
+                  {renderSyncBadge(item)}
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={{ color: theme.colors.success, fontWeight: '700' }}>
-                    ₦{Number(item.totalAmount || 0).toLocaleString()}
+                    {formatCurrency(item.totalAmount)}
                   </Text>
                   <AppButton
                     title="Send Receipt"
@@ -204,6 +241,7 @@ export default function SalesScreen({ navigation }) {
                     style={{ marginTop: 6, backgroundColor: '#25D366', borderColor: '#25D366' }}
                     onPress={() => sendWhatsAppReceipt(item.phone, item.customerName || 'Customer', item.receiptUrl)}
                     accessibilityLabel={`Send WhatsApp receipt to ${item.customerName || 'Customer'}`}
+                    disabled={!normalizeWhatsAppNumber(item.phone)}
                   />
                 </View>
               </View>

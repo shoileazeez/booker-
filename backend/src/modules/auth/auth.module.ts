@@ -18,7 +18,9 @@ import { NotificationsModule } from '../notifications/notifications.module';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'your-secret-key-change-in-production',
+        secret:
+          configService.get<string>('JWT_SECRET') ||
+          'your-secret-key-change-in-production',
         signOptions: {
           expiresIn: configService.get<string>('JWT_EXPIRES_IN') || '24h',
         },

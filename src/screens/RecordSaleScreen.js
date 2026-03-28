@@ -16,6 +16,7 @@ import { api } from '../api/client';
 import {
   cacheCustomers,
   cacheInventory,
+  getServerId,
   getCachedCustomers,
   getCachedInventory,
   setIdMapping,
@@ -78,6 +79,25 @@ export default function RecordSaleScreen({ navigation, route }) {
   );
   const unitPrice = Number(selectedItem?.sellingPrice || 0);
 
+  const resolveSalePayload = useCallback(async (payload) => {
+    const selectedCustomerRecord = customers.find((c) => c.id === customerId) || selectedCustomer || null;
+    const nextPayload = {
+      ...payload,
+      customerId: customerId || undefined,
+      customerName: selectedCustomerRecord?.name || payload.customerName || undefined,
+      phone: selectedCustomerRecord?.phone || payload.phone || undefined,
+    };
+
+    if (nextPayload.itemId && String(nextPayload.itemId).startsWith('local_')) {
+      const mappedItemId = await getServerId('inventory', String(nextPayload.itemId));
+      if (mappedItemId) {
+        nextPayload.itemId = mappedItemId;
+      }
+    }
+
+    return nextPayload;
+  }, [customerId, customers, selectedCustomer]);
+
   React.useEffect(() => {
     const loadInventory = async () => {
       if (!currentWorkspaceId) {
@@ -102,14 +122,41 @@ export default function RecordSaleScreen({ navigation, route }) {
 
   const postTransaction = async (payload) => {
     const localId = `local_tx_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const preparedPayload = await resolveSalePayload(payload);
+    const queueOfflineTransaction = async () => {
+      await upsertLocalTransaction({
+        local_id: localId,
+        server_id: null,
+        workspace_server_id: currentWorkspaceId,
+        data: { ...preparedPayload, local_id: localId },
+        sync_status: 'pending_create',
+      }, currentWorkspaceId);
+      await addSyncOutboxAction({
+        action_id: localId,
+        action_type: 'create_transaction',
+        entity_type: 'transaction',
+        entity_local_id: localId,
+        workspace_ref: currentWorkspaceId,
+        payload: preparedPayload,
+        depends_on_action_id: String(preparedPayload?.itemId || '').startsWith('local_')
+          ? preparedPayload.itemId
+          : null,
+      });
+    };
+
+    if (String(preparedPayload?.itemId || '').startsWith('local_')) {
+      await queueOfflineTransaction();
+      return;
+    }
+
     try {
-      const result = await api.post(`/workspaces/${currentWorkspaceId}/transactions`, payload);
+      const result = await api.post(`/workspaces/${currentWorkspaceId}/transactions`, preparedPayload);
       // Upsert into local SQLite so SalesScreen reflects the new transaction immediately
       upsertLocalTransaction({
         local_id: localId,
         server_id: result?.id ? String(result.id) : null,
         workspace_server_id: currentWorkspaceId,
-        data: { ...payload, ...(result || {}), id: result?.id ?? localId, local_id: localId },
+        data: { ...preparedPayload, ...(result || {}), id: result?.id ?? localId, local_id: localId },
         sync_status: 'synced',
       }, currentWorkspaceId).catch(() => null);
       if (result?.id) {
@@ -118,22 +165,7 @@ export default function RecordSaleScreen({ navigation, route }) {
     } catch (err) {
       const isOffline = !err?.response;
       if (isOffline) {
-        // Write to local SQLite immediately so the sale appears while offline
-        await upsertLocalTransaction({
-          local_id: localId,
-          server_id: null,
-          workspace_server_id: currentWorkspaceId,
-          data: { ...payload, local_id: localId },
-          sync_status: 'pending_create',
-        }, currentWorkspaceId);
-        await addSyncOutboxAction({
-          action_id: localId,
-          action_type: 'create_transaction',
-          entity_type: 'transaction',
-          entity_local_id: localId,
-          workspace_ref: currentWorkspaceId,
-          payload,
-        });
+        await queueOfflineTransaction();
       } else {
         throw err;
       }

@@ -1,4 +1,10 @@
-import { IsString, IsNumber, IsOptional, IsEnum, IsISO8601 } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsEnum,
+  IsISO8601,
+} from 'class-validator';
 
 export class CreateTransactionDto {
   @IsEnum(['sale', 'expense', 'purchase', 'return', 'adjustment', 'debt'])

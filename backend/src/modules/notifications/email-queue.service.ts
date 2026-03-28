@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from './email.service';
 
@@ -24,7 +29,9 @@ export class EmailQueueService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    const intervalMs = Number(this.configService.get<string>('EMAIL_QUEUE_POLL_INTERVAL_MS') || 1000);
+    const intervalMs = Number(
+      this.configService.get<string>('EMAIL_QUEUE_POLL_INTERVAL_MS') || 1000,
+    );
     this.timer = setInterval(() => {
       this.processNext().catch((err) => {
         this.logger.error(`Queue processor error: ${err?.message || err}`);
@@ -56,7 +63,9 @@ export class EmailQueueService implements OnModuleInit, OnModuleDestroy {
 
     this.processing = true;
 
-    const maxAttempts = Number(this.configService.get<string>('EMAIL_QUEUE_MAX_ATTEMPTS') || 5);
+    const maxAttempts = Number(
+      this.configService.get<string>('EMAIL_QUEUE_MAX_ATTEMPTS') || 5,
+    );
     const job = this.queue.shift();
     if (!job) {
       this.processing = false;
@@ -70,7 +79,9 @@ export class EmailQueueService implements OnModuleInit, OnModuleDestroy {
       if (job.attempts < maxAttempts) {
         this.queue.push(job);
       } else {
-        this.logger.error(`Email job ${job.id} failed after ${job.attempts} attempts: ${err?.message || err}`);
+        this.logger.error(
+          `Email job ${job.id} failed after ${job.attempts} attempts: ${err?.message || err}`,
+        );
       }
     } finally {
       this.processing = false;

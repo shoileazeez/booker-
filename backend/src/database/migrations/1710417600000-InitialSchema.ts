@@ -131,13 +131,19 @@ export class InitialSchema1710417600000 implements MigrationInterface {
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query('DROP TABLE IF EXISTS "transactions"');
-    await queryRunner.query('DROP TYPE IF EXISTS "transactions_paymentmethod_enum"');
+    await queryRunner.query(
+      'DROP TYPE IF EXISTS "transactions_paymentmethod_enum"',
+    );
     await queryRunner.query('DROP TYPE IF EXISTS "transactions_type_enum"');
 
     await queryRunner.query('DROP TABLE IF EXISTS "inventory_items"');
 
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_workspace_users_workspace_id"');
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_workspace_users_user_id"');
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_workspace_users_workspace_id"',
+    );
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_workspace_users_user_id"',
+    );
     await queryRunner.query('DROP TABLE IF EXISTS "workspace_users"');
 
     await queryRunner.query('DROP TABLE IF EXISTS "workspaces"');

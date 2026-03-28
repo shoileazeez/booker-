@@ -9,7 +9,10 @@ import { Transaction } from '../transactions/entities/transaction.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([InventoryItem, Workspace, User, Transaction]), NotificationsModule],
+  imports: [
+    TypeOrmModule.forFeature([InventoryItem, Workspace, User, Transaction]),
+    NotificationsModule,
+  ],
   providers: [InventoryService],
   controllers: [InventoryController],
   exports: [InventoryService],

@@ -42,10 +42,20 @@ export class AddWorkspaceMembershipRoles1710870000000 implements MigrationInterf
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_workspace_users_workspace_active"');
-    await queryRunner.query('ALTER TABLE "workspace_users" DROP COLUMN IF EXISTS "updated_at"');
-    await queryRunner.query('ALTER TABLE "workspace_users" DROP COLUMN IF EXISTS "created_at"');
-    await queryRunner.query('ALTER TABLE "workspace_users" DROP COLUMN IF EXISTS "is_active"');
-    await queryRunner.query('ALTER TABLE "workspace_users" DROP COLUMN IF EXISTS "role"');
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_workspace_users_workspace_active"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "workspace_users" DROP COLUMN IF EXISTS "updated_at"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "workspace_users" DROP COLUMN IF EXISTS "created_at"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "workspace_users" DROP COLUMN IF EXISTS "is_active"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "workspace_users" DROP COLUMN IF EXISTS "role"',
+    );
   }
 }

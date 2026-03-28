@@ -19,8 +19,7 @@ import { Customer } from '../modules/customer/customer.entity';
 //   is explicitly accepted).
 function buildSslOption() {
   if (process.env.DB_SSL !== 'true') return false;
-  const rejectUnauthorized =
-    process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false';
+  const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false';
   return { rejectUnauthorized };
 }
 

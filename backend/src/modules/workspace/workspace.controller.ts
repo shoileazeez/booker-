@@ -66,7 +66,11 @@ export class WorkspaceController {
     @Request() req,
     @Query('email') email: string,
   ) {
-    return this.workspaceService.findWorkspaceUserByEmail(id, req.user.sub, email);
+    return this.workspaceService.findWorkspaceUserByEmail(
+      id,
+      req.user.sub,
+      email,
+    );
   }
 
   @Get(':id/users/email/:email')
@@ -75,7 +79,11 @@ export class WorkspaceController {
     @Request() req,
     @Param('email') email: string,
   ) {
-    return this.workspaceService.findWorkspaceUserByEmail(id, req.user.sub, email);
+    return this.workspaceService.findWorkspaceUserByEmail(
+      id,
+      req.user.sub,
+      email,
+    );
   }
 
   @Put(':id')
@@ -87,13 +95,25 @@ export class WorkspaceController {
   }
 
   @Post(':id/users/:userId')
-  async addUser(@Param('id') id: string, @Param('userId') userId: string, @Request() req) {
+  async addUser(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Request() req,
+  ) {
     return this.workspaceService.addUserToWorkspace(id, userId, req.user.sub);
   }
 
   @Delete(':id/users/:userId')
-  async removeUser(@Param('id') id: string, @Param('userId') userId: string, @Request() req) {
-    return this.workspaceService.removeUserFromWorkspace(id, userId, req.user.sub);
+  async removeUser(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Request() req,
+  ) {
+    return this.workspaceService.removeUserFromWorkspace(
+      id,
+      userId,
+      req.user.sub,
+    );
   }
 
   @Put(':id/users/:userId/role')
@@ -103,7 +123,12 @@ export class WorkspaceController {
     @Body() body: { role: 'manager' | 'staff' | 'owner' },
     @Request() req,
   ) {
-    return this.workspaceService.updateWorkspaceUserRole(id, userId, req.user.sub, body.role);
+    return this.workspaceService.updateWorkspaceUserRole(
+      id,
+      userId,
+      req.user.sub,
+      body.role,
+    );
   }
 
   @Post(':id/invite')

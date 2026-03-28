@@ -157,10 +157,9 @@ export class InventoryService {
     return this.itemsRepository
       .createQueryBuilder('item')
       .where('item.workspace_id = :workspaceId', { workspaceId })
-      .andWhere(
-        '(item.name ILIKE :searchTerm OR item.sku ILIKE :searchTerm)',
-        { searchTerm: `%${searchTerm}%` },
-      )
+      .andWhere('(item.name ILIKE :searchTerm OR item.sku ILIKE :searchTerm)', {
+        searchTerm: `%${searchTerm}%`,
+      })
       .getMany();
   }
 }

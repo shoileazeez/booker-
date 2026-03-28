@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Workspace } from './entities/workspace.entity';
@@ -68,7 +73,9 @@ export class WorkspaceService {
     targetRole: 'owner' | 'manager' | 'staff',
   ) {
     if (targetRole === 'owner') {
-      throw new ForbiddenException('Owner role cannot be assigned from this flow');
+      throw new ForbiddenException(
+        'Owner role cannot be assigned from this flow',
+      );
     }
 
     if (requesterRole === 'manager' && targetRole !== 'staff') {
@@ -76,18 +83,34 @@ export class WorkspaceService {
     }
   }
 
-  private async createOrUpdateMembership(workspaceId: string, userId: string, role: 'owner' | 'manager' | 'staff') {
-    const existing = await this.membershipsRepository.findOne({ where: { workspaceId, userId } });
-    const membership = existing || this.membershipsRepository.create({ workspaceId, userId });
+  private async createOrUpdateMembership(
+    workspaceId: string,
+    userId: string,
+    role: 'owner' | 'manager' | 'staff',
+  ) {
+    const existing = await this.membershipsRepository.findOne({
+      where: { workspaceId, userId },
+    });
+    const membership =
+      existing || this.membershipsRepository.create({ workspaceId, userId });
     membership.role = role;
     membership.isActive = true;
     return this.membershipsRepository.save(membership);
   }
 
-  private async assertWorkspaceManagerAccess(workspaceId: string, requesterId: string, options?: { allowStaff?: boolean }) {
+  private async assertWorkspaceManagerAccess(
+    workspaceId: string,
+    requesterId: string,
+    options?: { allowStaff?: boolean },
+  ) {
     const workspace = await this.workspacesRepository.findOne({
       where: { id: workspaceId },
-      relations: ['createdBy', 'managerUser', 'parentWorkspace', 'parentWorkspace.createdBy'],
+      relations: [
+        'createdBy',
+        'managerUser',
+        'parentWorkspace',
+        'parentWorkspace.createdBy',
+      ],
     });
 
     if (!workspace) {
@@ -102,33 +125,50 @@ export class WorkspaceService {
       throw new NotFoundException('Requester not found');
     }
 
-    const isAdminLike = ['owner', 'admin', 'super_admin'].includes(requester.role);
+    const isAdminLike = ['owner', 'admin', 'super_admin'].includes(
+      requester.role,
+    );
     const membership = await this.getMembership(workspaceId, requesterId);
     const parentMembership = workspace.parentWorkspaceId
       ? await this.getMembership(workspace.parentWorkspaceId, requesterId)
       : null;
 
     const membershipRole = this.getEffectiveWorkspaceRole(membership);
-    const parentMembershipRole = this.getEffectiveWorkspaceRole(parentMembership);
-    const canManageCurrent = membershipRole === 'owner' || membershipRole === 'manager';
-    const canManageParent = parentMembershipRole === 'owner' || parentMembershipRole === 'manager';
+    const parentMembershipRole =
+      this.getEffectiveWorkspaceRole(parentMembership);
+    const canManageCurrent =
+      membershipRole === 'owner' || membershipRole === 'manager';
+    const canManageParent =
+      parentMembershipRole === 'owner' || parentMembershipRole === 'manager';
     const canViewAsStaff = options?.allowStaff && membershipRole === 'staff';
 
-    if (!canManageCurrent && !canManageParent && !canViewAsStaff && !isAdminLike) {
-      throw new ForbiddenException('You are not allowed to manage this workspace');
+    if (
+      !canManageCurrent &&
+      !canManageParent &&
+      !canViewAsStaff &&
+      !isAdminLike
+    ) {
+      throw new ForbiddenException(
+        'You are not allowed to manage this workspace',
+      );
     }
 
     return { workspace, requester, membership, parentMembership };
   }
 
-  async createWorkspace(createWorkspaceDto: CreateWorkspaceDto, userId: string) {
+  async createWorkspace(
+    createWorkspaceDto: CreateWorkspaceDto,
+    userId: string,
+  ) {
     const user = await this.usersRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    const subscription = await this.billingService.getCurrentSubscription(userId);
-    const normalizedPlan: 'basic' | 'pro' = subscription.plan === 'pro' ? 'pro' : 'basic';
+    const subscription =
+      await this.billingService.getCurrentSubscription(userId);
+    const normalizedPlan: 'basic' | 'pro' =
+      subscription.plan === 'pro' ? 'pro' : 'basic';
     const planLimit = subscription.limits.workspaceLimit;
     const currentWorkspaceCount = subscription.limits.workspaceUsed;
 
@@ -136,7 +176,8 @@ export class WorkspaceService {
       throw new ForbiddenException({
         statusCode: 403,
         code: 'SUBSCRIPTION_REQUIRED',
-        message: 'Your trial has ended. Please upgrade to a paid plan to continue.',
+        message:
+          'Your trial has ended. Please upgrade to a paid plan to continue.',
         meta: {
           plan: normalizedPlan,
           feature: 'workspace.create',
@@ -164,23 +205,32 @@ export class WorkspaceService {
     let managerUser: User | null = null;
 
     if (createWorkspaceDto.parentWorkspaceId) {
-      const parentWorkspace = await this.workspacesRepository.findOne({ where: { id: createWorkspaceDto.parentWorkspaceId } });
+      const parentWorkspace = await this.workspacesRepository.findOne({
+        where: { id: createWorkspaceDto.parentWorkspaceId },
+      });
 
       if (!parentWorkspace) {
         throw new NotFoundException('Parent workspace not found');
       }
 
-      const parentMembership = await this.getMembership(createWorkspaceDto.parentWorkspaceId, userId);
+      const parentMembership = await this.getMembership(
+        createWorkspaceDto.parentWorkspaceId,
+        userId,
+      );
       const canManageParent =
         this.getEffectiveWorkspaceRole(parentMembership) === 'owner' ||
         ['admin', 'super_admin'].includes(user.role);
 
       if (!canManageParent) {
-        throw new BadRequestException('You are not allowed to create a branch for this workspace');
+        throw new BadRequestException(
+          'You are not allowed to create a branch for this workspace',
+        );
       }
 
       if (createWorkspaceDto.managerUserId) {
-        managerUser = await this.usersRepository.findOne({ where: { id: createWorkspaceDto.managerUserId } });
+        managerUser = await this.usersRepository.findOne({
+          where: { id: createWorkspaceDto.managerUserId },
+        });
         if (!managerUser) {
           throw new NotFoundException('Selected manager user not found');
         }
@@ -234,7 +284,12 @@ export class WorkspaceService {
 
     const memberships = await this.membershipsRepository.find({
       where: { userId, isActive: true },
-      relations: ['workspace', 'workspace.managerUser', 'workspace.createdBy', 'workspace.parentWorkspace'],
+      relations: [
+        'workspace',
+        'workspace.managerUser',
+        'workspace.createdBy',
+        'workspace.parentWorkspace',
+      ],
       order: { updatedAt: 'DESC' },
     });
 
@@ -276,7 +331,8 @@ export class WorkspaceService {
     });
 
     const requesterMembership = requesterId
-      ? memberships.find((membership) => membership.userId === requesterId) || null
+      ? memberships.find((membership) => membership.userId === requesterId) ||
+        null
       : null;
 
     return {
@@ -294,7 +350,9 @@ export class WorkspaceService {
   }
 
   async updateWorkspace(workspaceId: string, updateData: Partial<Workspace>) {
-    const workspace = await this.workspacesRepository.findOne({ where: { id: workspaceId } });
+    const workspace = await this.workspacesRepository.findOne({
+      where: { id: workspaceId },
+    });
     if (!workspace) {
       throw new NotFoundException('Workspace not found');
     }
@@ -312,12 +370,16 @@ export class WorkspaceService {
     });
 
     const branchIds = branches.map((branch) => branch.id);
-    const branchMemberships = branchIds.length > 0
-      ? await this.membershipsRepository.find({
-          where: branchIds.map((branchId) => ({ workspaceId: branchId, isActive: true })),
-          relations: ['user'],
-        })
-      : [];
+    const branchMemberships =
+      branchIds.length > 0
+        ? await this.membershipsRepository.find({
+            where: branchIds.map((branchId) => ({
+              workspaceId: branchId,
+              isActive: true,
+            })),
+            relations: ['user'],
+          })
+        : [];
 
     return branches.map((branch) => ({
       ...branch,
@@ -333,7 +395,10 @@ export class WorkspaceService {
   }
 
   async getManagementOverview(workspaceId: string, requesterId: string) {
-    const { workspace } = await this.assertWorkspaceManagerAccess(workspaceId, requesterId);
+    const { workspace } = await this.assertWorkspaceManagerAccess(
+      workspaceId,
+      requesterId,
+    );
 
     const branchEntities = await this.workspacesRepository.find({
       where: [{ id: workspaceId }, { parentWorkspaceId: workspaceId }],
@@ -342,7 +407,10 @@ export class WorkspaceService {
     });
 
     const allMemberships = await this.membershipsRepository.find({
-      where: branchEntities.map((item) => ({ workspaceId: item.id, isActive: true })),
+      where: branchEntities.map((item) => ({
+        workspaceId: item.id,
+        isActive: true,
+      })),
       relations: ['user'],
     });
 
@@ -358,9 +426,18 @@ export class WorkspaceService {
     const transactionStats = await this.transactionsRepository
       .createQueryBuilder('transaction')
       .select('transaction.workspace_id', 'workspaceId')
-      .addSelect("SUM(CASE WHEN transaction.type = 'sale' THEN transaction.totalAmount ELSE 0 END)", 'salesAmount')
-      .addSelect("SUM(CASE WHEN transaction.type = 'sale' THEN 1 ELSE 0 END)", 'salesCount')
-      .addSelect("SUM(CASE WHEN transaction.type = 'debt' AND transaction.status = 'pending' THEN transaction.totalAmount ELSE 0 END)", 'pendingDebtAmount')
+      .addSelect(
+        "SUM(CASE WHEN transaction.type = 'sale' THEN transaction.totalAmount ELSE 0 END)",
+        'salesAmount',
+      )
+      .addSelect(
+        "SUM(CASE WHEN transaction.type = 'sale' THEN 1 ELSE 0 END)",
+        'salesCount',
+      )
+      .addSelect(
+        "SUM(CASE WHEN transaction.type = 'debt' AND transaction.status = 'pending' THEN transaction.totalAmount ELSE 0 END)",
+        'pendingDebtAmount',
+      )
       .where('transaction.workspace_id IN (:...workspaceIds)', { workspaceIds })
       .groupBy('transaction.workspace_id')
       .getRawMany();
@@ -374,15 +451,24 @@ export class WorkspaceService {
       .addSelect('createdBy.email', 'email')
       .addSelect('workspace.id', 'workspaceId')
       .addSelect('workspace.name', 'workspaceName')
-      .addSelect("SUM(CASE WHEN transaction.type = 'sale' THEN transaction.totalAmount ELSE 0 END)", 'salesAmount')
-      .addSelect("SUM(CASE WHEN transaction.type = 'sale' THEN 1 ELSE 0 END)", 'salesCount')
+      .addSelect(
+        "SUM(CASE WHEN transaction.type = 'sale' THEN transaction.totalAmount ELSE 0 END)",
+        'salesAmount',
+      )
+      .addSelect(
+        "SUM(CASE WHEN transaction.type = 'sale' THEN 1 ELSE 0 END)",
+        'salesCount',
+      )
       .where('transaction.workspace_id IN (:...workspaceIds)', { workspaceIds })
       .groupBy('createdBy.id')
       .addGroupBy('createdBy.name')
       .addGroupBy('createdBy.email')
       .addGroupBy('workspace.id')
       .addGroupBy('workspace.name')
-      .orderBy("SUM(CASE WHEN transaction.type = 'sale' THEN transaction.totalAmount ELSE 0 END)", 'DESC')
+      .orderBy(
+        "SUM(CASE WHEN transaction.type = 'sale' THEN transaction.totalAmount ELSE 0 END)",
+        'DESC',
+      )
       .getRawMany();
 
     const pendingInvites = await this.invitesRepository.find({
@@ -390,17 +476,25 @@ export class WorkspaceService {
       order: { createdAt: 'DESC' },
     });
 
-    const inventoryMap = new Map(inventoryCounts.map((row) => [row.workspaceId, Number(row.inventoryCount || 0)]));
-    const transactionMap = new Map(transactionStats.map((row) => [
-      row.workspaceId,
-      {
-        salesAmount: Number(row.salesAmount || 0),
-        salesCount: Number(row.salesCount || 0),
-        pendingDebtAmount: Number(row.pendingDebtAmount || 0),
-      },
-    ]));
+    const inventoryMap = new Map(
+      inventoryCounts.map((row) => [
+        row.workspaceId,
+        Number(row.inventoryCount || 0),
+      ]),
+    );
+    const transactionMap = new Map(
+      transactionStats.map((row) => [
+        row.workspaceId,
+        {
+          salesAmount: Number(row.salesAmount || 0),
+          salesCount: Number(row.salesCount || 0),
+          pendingDebtAmount: Number(row.pendingDebtAmount || 0),
+        },
+      ]),
+    );
 
-    const rootWorkspace = branchEntities.find((item) => item.id === workspaceId) || workspace;
+    const rootWorkspace =
+      branchEntities.find((item) => item.id === workspaceId) || workspace;
     const branchSummaries = branchEntities
       .filter((item) => item.id !== workspaceId)
       .map((branch) => ({
@@ -409,21 +503,40 @@ export class WorkspaceService {
         status: branch.status,
         createdAt: branch.createdAt,
         managerUser: branch.managerUser
-          ? { id: branch.managerUser.id, name: branch.managerUser.name, email: branch.managerUser.email }
+          ? {
+              id: branch.managerUser.id,
+              name: branch.managerUser.name,
+              email: branch.managerUser.email,
+            }
           : null,
-        staffCount: allMemberships.filter((membership) => membership.workspaceId === branch.id).length,
+        staffCount: allMemberships.filter(
+          (membership) => membership.workspaceId === branch.id,
+        ).length,
         inventoryCount: inventoryMap.get(branch.id) || 0,
         salesAmount: transactionMap.get(branch.id)?.salesAmount || 0,
         salesCount: transactionMap.get(branch.id)?.salesCount || 0,
-        pendingDebtAmount: transactionMap.get(branch.id)?.pendingDebtAmount || 0,
+        pendingDebtAmount:
+          transactionMap.get(branch.id)?.pendingDebtAmount || 0,
       }));
 
-    const workspaceMemberships = allMemberships.filter((membership) => membership.workspaceId === rootWorkspace.id);
-    const memberIds = new Set(workspaceMemberships.map((membership) => membership.userId));
+    const workspaceMemberships = allMemberships.filter(
+      (membership) => membership.workspaceId === rootWorkspace.id,
+    );
+    const memberIds = new Set(
+      workspaceMemberships.map((membership) => membership.userId),
+    );
     const memberSummaries = workspaceMemberships.map((membership) => {
-      const staffRows = staffPerformance.filter((row) => row.userId === membership.userId);
-      const totalSalesAmount = staffRows.reduce((sum, row) => sum + Number(row.salesAmount || 0), 0);
-      const totalSalesCount = staffRows.reduce((sum, row) => sum + Number(row.salesCount || 0), 0);
+      const staffRows = staffPerformance.filter(
+        (row) => row.userId === membership.userId,
+      );
+      const totalSalesAmount = staffRows.reduce(
+        (sum, row) => sum + Number(row.salesAmount || 0),
+        0,
+      );
+      const totalSalesCount = staffRows.reduce(
+        (sum, row) => sum + Number(row.salesCount || 0),
+        0,
+      );
       return {
         id: membership.user.id,
         name: membership.user.name,
@@ -438,14 +551,24 @@ export class WorkspaceService {
 
     const totals = branchEntities.reduce(
       (acc, item) => {
-        acc.staffCount += allMemberships.filter((membership) => membership.workspaceId === item.id).length;
+        acc.staffCount += allMemberships.filter(
+          (membership) => membership.workspaceId === item.id,
+        ).length;
         acc.inventoryCount += inventoryMap.get(item.id) || 0;
         acc.salesAmount += transactionMap.get(item.id)?.salesAmount || 0;
         acc.salesCount += transactionMap.get(item.id)?.salesCount || 0;
-        acc.pendingDebtAmount += transactionMap.get(item.id)?.pendingDebtAmount || 0;
+        acc.pendingDebtAmount +=
+          transactionMap.get(item.id)?.pendingDebtAmount || 0;
         return acc;
       },
-      { branchCount: Math.max(0, branchEntities.length - 1), staffCount: 0, inventoryCount: 0, salesAmount: 0, salesCount: 0, pendingDebtAmount: 0 },
+      {
+        branchCount: Math.max(0, branchEntities.length - 1),
+        staffCount: 0,
+        inventoryCount: 0,
+        salesAmount: 0,
+        salesCount: 0,
+        pendingDebtAmount: 0,
+      },
     );
 
     return {
@@ -454,7 +577,11 @@ export class WorkspaceService {
         name: rootWorkspace.name,
         status: rootWorkspace.status,
         managerUser: rootWorkspace.managerUser
-          ? { id: rootWorkspace.managerUser.id, name: rootWorkspace.managerUser.name, email: rootWorkspace.managerUser.email }
+          ? {
+              id: rootWorkspace.managerUser.id,
+              name: rootWorkspace.managerUser.name,
+              email: rootWorkspace.managerUser.email,
+            }
           : null,
       },
       totals,
@@ -482,7 +609,11 @@ export class WorkspaceService {
     };
   }
 
-  async findWorkspaceUserByEmail(workspaceId: string, requesterId: string, email: string) {
+  async findWorkspaceUserByEmail(
+    workspaceId: string,
+    requesterId: string,
+    email: string,
+  ) {
     const normalizedEmail = email?.trim().toLowerCase();
     if (!normalizedEmail) {
       throw new BadRequestException('Email is required');
@@ -510,15 +641,24 @@ export class WorkspaceService {
     };
   }
 
-  async addUserToWorkspace(workspaceId: string, userId: string, requesterId: string) {
-    const { workspace } = await this.assertWorkspaceManagerAccess(workspaceId, requesterId);
+  async addUserToWorkspace(
+    workspaceId: string,
+    userId: string,
+    requesterId: string,
+  ) {
+    const { workspace } = await this.assertWorkspaceManagerAccess(
+      workspaceId,
+      requesterId,
+    );
     const user = await this.usersRepository.findOne({ where: { id: userId } });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    const existingMembership = await this.membershipsRepository.findOne({ where: { workspaceId, userId } });
+    const existingMembership = await this.membershipsRepository.findOne({
+      where: { workspaceId, userId },
+    });
     if (existingMembership?.isActive) {
       throw new BadRequestException('User already belongs to this workspace');
     }
@@ -527,8 +667,15 @@ export class WorkspaceService {
     return this.getWorkspace(workspace.id, requesterId);
   }
 
-  async removeUserFromWorkspace(workspaceId: string, userId: string, requesterId: string) {
-    const { workspace } = await this.assertWorkspaceManagerAccess(workspaceId, requesterId);
+  async removeUserFromWorkspace(
+    workspaceId: string,
+    userId: string,
+    requesterId: string,
+  ) {
+    const { workspace } = await this.assertWorkspaceManagerAccess(
+      workspaceId,
+      requesterId,
+    );
     if (workspace.createdBy?.id === userId) {
       throw new BadRequestException('You cannot revoke the workspace owner');
     }
@@ -537,7 +684,9 @@ export class WorkspaceService {
       workspace.managerUser = null;
       await this.workspacesRepository.save(workspace);
     }
-    const membership = await this.membershipsRepository.findOne({ where: { workspaceId, userId } });
+    const membership = await this.membershipsRepository.findOne({
+      where: { workspaceId, userId },
+    });
     if (!membership || !membership.isActive) {
       throw new BadRequestException('User does not belong to this workspace');
     }
@@ -546,15 +695,30 @@ export class WorkspaceService {
     return { removed: true, workspaceId, userId };
   }
 
-  async updateWorkspaceUserRole(workspaceId: string, userId: string, requesterId: string, role: 'manager' | 'staff' | 'owner') {
-    const { workspace, membership: requesterMembership, parentMembership, requester } = await this.assertWorkspaceManagerAccess(workspaceId, requesterId);
-    const targetMembership = await this.membershipsRepository.findOne({ where: { workspaceId, userId, isActive: true }, relations: ['user'] });
+  async updateWorkspaceUserRole(
+    workspaceId: string,
+    userId: string,
+    requesterId: string,
+    role: 'manager' | 'staff' | 'owner',
+  ) {
+    const {
+      workspace,
+      membership: requesterMembership,
+      parentMembership,
+      requester,
+    } = await this.assertWorkspaceManagerAccess(workspaceId, requesterId);
+    const targetMembership = await this.membershipsRepository.findOne({
+      where: { workspaceId, userId, isActive: true },
+      relations: ['user'],
+    });
     if (!targetMembership) {
       throw new BadRequestException('User does not belong to this workspace');
     }
 
     if (workspace.createdBy?.id === userId) {
-      throw new BadRequestException('Workspace owner role cannot be changed here');
+      throw new BadRequestException(
+        'Workspace owner role cannot be changed here',
+      );
     }
 
     const normalizedRole = this.normalizeWorkspaceRole(role);
@@ -634,7 +798,10 @@ export class WorkspaceService {
     return results;
   }
 
-  async acceptInvite(userId: string, payload: { inviteId: string; code: string }) {
+  async acceptInvite(
+    userId: string,
+    payload: { inviteId: string; code: string },
+  ) {
     const inviteId = payload?.inviteId?.trim();
     const code = payload?.code?.trim();
 
@@ -657,7 +824,9 @@ export class WorkspaceService {
     }
 
     if (invite.email?.toLowerCase() !== user.email?.toLowerCase()) {
-      throw new ForbiddenException('This invite does not belong to your account');
+      throw new ForbiddenException(
+        'This invite does not belong to your account',
+      );
     }
 
     if (invite.status !== 'pending') {
@@ -708,12 +877,17 @@ export class WorkspaceService {
     };
   }
 
-  async inviteUser(workspaceId: string, requesterId: string, inviteDto: { email: string; role?: string }) {
+  async inviteUser(
+    workspaceId: string,
+    requesterId: string,
+    inviteDto: { email: string; role?: string },
+  ) {
     const normalizedEmail = inviteDto.email?.trim().toLowerCase();
     if (!normalizedEmail) {
       throw new BadRequestException('Email is required');
     }
-    const { workspace, membership, parentMembership, requester } = await this.assertWorkspaceManagerAccess(workspaceId, requesterId);
+    const { workspace, membership, parentMembership, requester } =
+      await this.assertWorkspaceManagerAccess(workspaceId, requesterId);
     const inviteRole = this.normalizeWorkspaceRole(inviteDto.role);
     const requesterRole = ['admin', 'super_admin'].includes(requester.role)
       ? 'owner'
@@ -724,7 +898,9 @@ export class WorkspaceService {
       order: { createdAt: 'DESC' },
     });
     if (existingPendingInvite && !this.isInviteExpired(existingPendingInvite)) {
-      throw new BadRequestException('A pending invite already exists for this email');
+      throw new BadRequestException(
+        'A pending invite already exists for this email',
+      );
     }
     if (existingPendingInvite && this.isInviteExpired(existingPendingInvite)) {
       existingPendingInvite.status = 'expired';
@@ -732,10 +908,14 @@ export class WorkspaceService {
     }
 
     // Check if user exists
-    let user = await this.usersRepository.findOne({ where: { email: normalizedEmail } });
+    const user = await this.usersRepository.findOne({
+      where: { email: normalizedEmail },
+    });
     let alreadyMember = false;
     if (user) {
-      const membership = await this.membershipsRepository.findOne({ where: { workspaceId, userId: user.id, isActive: true } });
+      const membership = await this.membershipsRepository.findOne({
+        where: { workspaceId, userId: user.id, isActive: true },
+      });
       alreadyMember = !!membership;
     }
     if (alreadyMember) {
@@ -778,7 +958,8 @@ export class WorkspaceService {
       expiresAt,
       delivery,
       inviteCode: delivery === 'manual_code_required' ? inviteCode : undefined,
-      deliveryWarning: delivery === 'manual_code_required' ? emailReadiness.reason : undefined,
+      deliveryWarning:
+        delivery === 'manual_code_required' ? emailReadiness.reason : undefined,
     };
   }
 }

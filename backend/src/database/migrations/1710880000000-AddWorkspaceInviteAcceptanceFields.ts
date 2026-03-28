@@ -46,9 +46,17 @@ export class AddWorkspaceInviteAcceptanceFields1710880000000 implements Migratio
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('DROP INDEX IF EXISTS "IDX_workspace_invites_email_status"');
-    await queryRunner.query('ALTER TABLE "workspace_invites" DROP COLUMN IF EXISTS "accepted_at"');
-    await queryRunner.query('ALTER TABLE "workspace_invites" DROP COLUMN IF EXISTS "expires_at"');
-    await queryRunner.query('ALTER TABLE "workspace_invites" DROP COLUMN IF EXISTS "invite_code"');
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS "IDX_workspace_invites_email_status"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "workspace_invites" DROP COLUMN IF EXISTS "accepted_at"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "workspace_invites" DROP COLUMN IF EXISTS "expires_at"',
+    );
+    await queryRunner.query(
+      'ALTER TABLE "workspace_invites" DROP COLUMN IF EXISTS "invite_code"',
+    );
   }
 }

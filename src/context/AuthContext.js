@@ -11,6 +11,7 @@ const STORAGE_KEY = '@booker:auth';
 const OFFLINE_PWHASH_KEY = '@booker:offlinePwHash';
 const OFFLINE_PWHASH_META_KEY = '@booker:offlinePwMeta';
 const OFFLINE_MAX_DAYS = 7;
+const isLikelyOfflineError = (err) => !!err?.message && /network|offline|timeout|fetch/i.test(err.message);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -51,6 +52,44 @@ export const AuthProvider = ({ children }) => {
     setRequiresReAuth(false);
   };
 
+  const tryOfflinePasswordAuth = async (email, password) => {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const storedAuthRaw = await AsyncStorage.getItem(STORAGE_KEY);
+    const storedHash = await AsyncStorage.getItem(OFFLINE_PWHASH_KEY);
+    const metaRaw = await AsyncStorage.getItem(OFFLINE_PWHASH_META_KEY);
+
+    if (!storedAuthRaw || !storedHash || !metaRaw) {
+      throw new Error('Offline sign-in is not available yet for this account.');
+    }
+
+    const storedAuth = JSON.parse(storedAuthRaw);
+    const meta = JSON.parse(metaRaw);
+    const storedEmail = String(meta?.email || storedAuth?.user?.email || '').trim().toLowerCase();
+
+    if (!storedEmail || storedEmail !== normalizedEmail) {
+      throw new Error('Offline sign-in is only available for the last account used on this device.');
+    }
+
+    if (!meta?.updatedAt || Date.now() - meta.updatedAt >= OFFLINE_MAX_DAYS * 86400000) {
+      throw new Error('Offline sign-in expired. Please connect to the internet.');
+    }
+
+    const hash = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      password + ':' + storedEmail
+    );
+
+    if (hash !== storedHash) {
+      throw new Error('Incorrect password (offline).');
+    }
+
+    setAuthToken(storedAuth?.token || null);
+    setToken(storedAuth?.token || null);
+    setUser(storedAuth?.user || null);
+    setRequiresReAuth(false);
+    return storedAuth?.user || null;
+  };
+
   const clearAuth = async () => {
     try {
       await AsyncStorage.removeItem(STORAGE_KEY);
@@ -80,14 +119,20 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = async (email, password) => {
-    const response = await api.post('/auth/login', { email, password });
-    const { access_token, user: userData } = response;
-    await saveAuth(access_token, userData, password);
-    // If trial expired, return upgradeRequired flag
-    if (userData.upgradeRequired) {
-      throw new Error('Your free trial has ended. Please upgrade your plan to continue.');
+    try {
+      const response = await api.post('/auth/login', { email, password });
+      const { access_token, user: userData } = response;
+      await saveAuth(access_token, userData, password);
+      if (userData.upgradeRequired) {
+        throw new Error('Your free trial has ended. Please upgrade your plan to continue.');
+      }
+      return userData;
+    } catch (err) {
+      if (isLikelyOfflineError(err)) {
+        return tryOfflinePasswordAuth(email, password);
+      }
+      throw err;
     }
-    return userData;
   };
 
   // Re-authenticate using the stored user's email + a new password entry
@@ -99,7 +144,7 @@ export const AuthProvider = ({ children }) => {
       return await login(userRef.current.email, password);
     } catch (err) {
       // If offline, try offline fallback
-      if (err?.message && /network|offline|timeout/i.test(err.message)) {
+      if (isLikelyOfflineError(err)) {
         // Check offline hash
         const salt = userRef.current.email;
         const hash = await Crypto.digestStringAsync(

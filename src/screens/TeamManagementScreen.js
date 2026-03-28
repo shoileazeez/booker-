@@ -80,46 +80,34 @@ export default function TeamManagementScreen({ navigation }) {
 
     setSubmittingInvite(true);
     try {
-      let foundUser = null;
       try {
-        foundUser = await api.get(`/workspaces/${currentWorkspaceId}/users/search`, { email });
-      } catch (err) {
-        foundUser = null;
-      }
-
-      if (foundUser?.id && !foundUser?.alreadyMember) {
-        await api.post(`/workspaces/${currentWorkspaceId}/users/${foundUser.id}`);
-        if (inviteRole === 'manager') {
-          await api.put(`/workspaces/${currentWorkspaceId}/users/${foundUser.id}/role`, { role: 'manager' });
-        }
-      } else if (foundUser?.alreadyMember) {
-        Alert.alert('Already added', `${email} already belongs to this workspace.`);
-        return;
-      } else {
-        const inviteResult = await api.post(`/workspaces/${currentWorkspaceId}/team/invite`, {
-          email,
-          role: inviteRole,
-        });
-        setInviteEmail('');
-        setInviteRole('staff');
-        await loadOverview(true);
-
-        if (inviteResult?.delivery === 'manual_code_required' && inviteResult?.inviteCode) {
-          Alert.alert(
-            'Invite created',
-            `Email delivery is not configured yet.\n\nInvite code for ${email}: ${inviteResult.inviteCode}`,
-          );
+        const foundUser = await api.get(`/workspaces/${currentWorkspaceId}/users/search`, { email });
+        if (foundUser?.alreadyMember) {
+          Alert.alert('Already added', `${email} already belongs to this workspace.`);
           return;
         }
+      } catch (err) {
+        // Best-effort lookup only.
       }
+
+      const inviteResult = await api.post(`/workspaces/${currentWorkspaceId}/team/invite`, {
+        email,
+        role: inviteRole,
+      });
 
       setInviteEmail('');
       setInviteRole('staff');
       await loadOverview(true);
-      Alert.alert(
-        foundUser?.id ? 'Member added' : 'Invite sent',
-        foundUser?.id ? `${email} was added to the workspace.` : `Invitation sent to ${email}.`,
-      );
+
+      if (inviteResult?.delivery === 'manual_code_required' && inviteResult?.inviteCode) {
+        Alert.alert(
+          'Invite created',
+          `Email delivery is not configured yet.\n\nInvite code for ${email}: ${inviteResult.inviteCode}`,
+        );
+        return;
+      }
+
+      Alert.alert('Invite sent', `Invitation sent to ${email}. They must accept it with their code.`);
     } catch (err) {
       Alert.alert('Invite failed', err?.message || 'Unable to send invitation.');
     } finally {

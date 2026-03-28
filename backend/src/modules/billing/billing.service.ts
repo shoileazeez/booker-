@@ -17,7 +17,11 @@ import { PushService } from '../notifications/push.service';
 
 type PlanKey = 'basic' | 'pro';
 type BillingCycle = 'monthly' | 'yearly';
-type Addons = { workspaceSlots: number; staffSeats: number; whatsappBundles: number };
+type Addons = {
+  workspaceSlots: number;
+  staffSeats: number;
+  whatsappBundles: number;
+};
 
 const PLAN_PRICES_NGN: Record<PlanKey, number> = {
   basic: 2500,
@@ -90,13 +94,20 @@ export class BillingService {
   }
 
   private async findOrCreateSubscription(user: User) {
-    let subscription = await this.subscriptionsRepository.findOne({ where: { userId: user.id } });
+    let subscription = await this.subscriptionsRepository.findOne({
+      where: { userId: user.id },
+    });
 
     if (!subscription) {
       subscription = this.subscriptionsRepository.create({
         userId: user.id,
         plan: user.plan === 'pro' ? 'pro' : 'basic',
-        status: user.trialStatus === 'active' ? 'trialing' : user.trialStatus === 'expired' ? 'expired' : 'active',
+        status:
+          user.trialStatus === 'active'
+            ? 'trialing'
+            : user.trialStatus === 'expired'
+              ? 'expired'
+              : 'active',
         trialEndsAt: user.trialEndsAt || null,
         currentPeriodStartAt: user.trialStartAt || null,
         currentPeriodEndsAt: user.trialEndsAt || null,
@@ -114,11 +125,16 @@ export class BillingService {
 
   private resolveTrialState(user: User) {
     const now = Date.now();
-    const trialEndsAtMs = user.trialEndsAt ? new Date(user.trialEndsAt).getTime() : null;
-    const isTrialing = user.trialStatus === 'active' && !!trialEndsAtMs && trialEndsAtMs > now;
+    const trialEndsAtMs = user.trialEndsAt
+      ? new Date(user.trialEndsAt).getTime()
+      : null;
+    const isTrialing =
+      user.trialStatus === 'active' && !!trialEndsAtMs && trialEndsAtMs > now;
     const isTrialExpired =
       user.trialStatus === 'expired' ||
-      (user.trialStatus === 'active' && !!trialEndsAtMs && trialEndsAtMs <= now);
+      (user.trialStatus === 'active' &&
+        !!trialEndsAtMs &&
+        trialEndsAtMs <= now);
 
     return { isTrialing, isTrialExpired, trialEndsAtMs, now };
   }
@@ -140,7 +156,9 @@ export class BillingService {
 
     const payload = (await res.json()) as Record<string, any>;
     if (!res.ok || payload?.status === false) {
-      throw new BadRequestException(payload?.message || 'Paystack request failed');
+      throw new BadRequestException(
+        payload?.message || 'Paystack request failed',
+      );
     }
     return payload;
   }
@@ -227,7 +245,8 @@ export class BillingService {
       throw new NotFoundException('User not found');
     }
 
-    const { isTrialing, isTrialExpired, trialEndsAtMs, now } = this.resolveTrialState(user);
+    const { isTrialing, isTrialExpired, trialEndsAtMs, now } =
+      this.resolveTrialState(user);
     const subscription = await this.findOrCreateSubscription(user);
 
     const normalizedPlan: PlanKey = user.plan === 'pro' ? 'pro' : 'basic';
@@ -238,7 +257,9 @@ export class BillingService {
       whatsappBundles: subscription.addonWhatsappBundles || 0,
     };
 
-    const effectiveAddOns = isTrialing ? { workspaceSlots: 0, staffSeats: 0, whatsappBundles: 0 } : addOns;
+    const effectiveAddOns = isTrialing
+      ? { workspaceSlots: 0, staffSeats: 0, whatsappBundles: 0 }
+      : addOns;
     const limits = this.computeLimits(normalizedPlan, effectiveAddOns);
     const ownedWorkspaceCount = await this.workspacesRepository.count({
       where: { createdBy: { id: userId } },
@@ -252,7 +273,10 @@ export class BillingService {
         status: user.trialStatus,
         startAt: user.trialStartAt,
         endsAt: user.trialEndsAt,
-        daysLeft: isTrialing && trialEndsAtMs ? Math.ceil((trialEndsAtMs - now) / (24 * 60 * 60 * 1000)) : 0,
+        daysLeft:
+          isTrialing && trialEndsAtMs
+            ? Math.ceil((trialEndsAtMs - now) / (24 * 60 * 60 * 1000))
+            : 0,
         addonsAllowed: !isTrialing,
       },
       addOns: effectiveAddOns,
@@ -274,9 +298,11 @@ export class BillingService {
     if (!user) throw new NotFoundException('User not found');
     const persistedSubscription = await this.findOrCreateSubscription(user);
 
-    const whatsappUsed = persistedSubscription.whatsappMessagesUsedThisMonth || 0;
+    const whatsappUsed =
+      persistedSubscription.whatsappMessagesUsedThisMonth || 0;
     const whatsappLimit = subscription.limits.whatsappMonthlyQuota;
-    const automationPaused = whatsappLimit > 0 ? whatsappUsed >= whatsappLimit : true;
+    const automationPaused =
+      whatsappLimit > 0 ? whatsappUsed >= whatsappLimit : true;
 
     return {
       workspace: {
@@ -306,24 +332,42 @@ export class BillingService {
 
     const { isTrialing } = this.resolveTrialState(user);
     const targetPlan: PlanKey = dto.plan === 'pro' ? 'pro' : 'basic';
-    const billingCycle: BillingCycle = dto.billingCycle === 'yearly' ? 'yearly' : 'monthly';
+    const billingCycle: BillingCycle =
+      dto.billingCycle === 'yearly' ? 'yearly' : 'monthly';
     const requestedAddons = this.normalizeAddons({
       workspaceSlots: dto.addonWorkspaceSlots,
       staffSeats: dto.addonStaffSeats,
       whatsappBundles: dto.addonWhatsappBundles,
     });
 
-    if (isTrialing && (requestedAddons.workspaceSlots > 0 || requestedAddons.staffSeats > 0 || requestedAddons.whatsappBundles > 0)) {
-      throw new ForbiddenException('Add-ons are not allowed during active trial.');
+    if (
+      isTrialing &&
+      (requestedAddons.workspaceSlots > 0 ||
+        requestedAddons.staffSeats > 0 ||
+        requestedAddons.whatsappBundles > 0)
+    ) {
+      throw new ForbiddenException(
+        'Add-ons are not allowed during active trial.',
+      );
     }
 
-    const planAmount = this.toCycleAmount(PLAN_PRICES_NGN[targetPlan], billingCycle);
-    const addonsAmount = this.toCycleAmount(this.calculateAddonsAmount(requestedAddons), billingCycle);
+    const planAmount = this.toCycleAmount(
+      PLAN_PRICES_NGN[targetPlan],
+      billingCycle,
+    );
+    const addonsAmount = this.toCycleAmount(
+      this.calculateAddonsAmount(requestedAddons),
+      billingCycle,
+    );
     const amountNgn = planAmount + addonsAmount;
-    if (amountNgn <= 0) throw new BadRequestException('Invalid checkout amount');
+    if (amountNgn <= 0)
+      throw new BadRequestException('Invalid checkout amount');
 
-    const reference = `BRK_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`.toUpperCase();
-    const callbackUrl = process.env.PAYSTACK_CALLBACK_URL || 'https://example.com/paystack/callback';
+    const reference =
+      `BRK_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`.toUpperCase();
+    const callbackUrl =
+      process.env.PAYSTACK_CALLBACK_URL ||
+      'https://example.com/paystack/callback';
 
     const payment = this.paymentsRepository.create({
       userId,
@@ -332,7 +376,9 @@ export class BillingService {
       amount: amountNgn,
       currency: 'NGN',
       purchaseType:
-        requestedAddons.workspaceSlots > 0 || requestedAddons.staffSeats > 0 || requestedAddons.whatsappBundles > 0
+        requestedAddons.workspaceSlots > 0 ||
+        requestedAddons.staffSeats > 0 ||
+        requestedAddons.whatsappBundles > 0
           ? 'addon_purchase'
           : 'plan_upgrade',
       billingCycle,
@@ -378,11 +424,16 @@ export class BillingService {
   }
 
   async verifyPayment(reference: string, userId?: string) {
-    const payment = await this.paymentsRepository.findOne({ where: { reference } });
+    const payment = await this.paymentsRepository.findOne({
+      where: { reference },
+    });
     if (!payment) throw new NotFoundException('Payment reference not found');
-    if (userId && payment.userId !== userId) throw new ForbiddenException('Payment does not belong to user');
+    if (userId && payment.userId !== userId)
+      throw new ForbiddenException('Payment does not belong to user');
 
-    const verified = await this.paystackRequest(`/transaction/verify/${encodeURIComponent(reference)}`);
+    const verified = await this.paystackRequest(
+      `/transaction/verify/${encodeURIComponent(reference)}`,
+    );
     const status = verified.data?.status;
 
     if (status !== 'success') {
@@ -399,12 +450,17 @@ export class BillingService {
     };
   }
 
-  private async applySuccessfulPayment(payment: Payment, verifiedPayload: Record<string, any>) {
+  private async applySuccessfulPayment(
+    payment: Payment,
+    verifiedPayload: Record<string, any>,
+  ) {
     if (payment.status === 'success') {
       return;
     }
 
-    const user = await this.usersRepository.findOne({ where: { id: payment.userId } });
+    const user = await this.usersRepository.findOne({
+      where: { id: payment.userId },
+    });
     if (!user) throw new NotFoundException('User not found');
 
     const subscription = await this.findOrCreateSubscription(user);
@@ -423,7 +479,12 @@ export class BillingService {
     subscription.billingCycle = payment.billingCycle || 'monthly';
     subscription.currentPeriodStartAt = new Date();
     subscription.currentPeriodEndsAt = new Date(
-      Date.now() + (subscription.billingCycle === 'yearly' ? 365 : 30) * 24 * 60 * 60 * 1000,
+      Date.now() +
+        (subscription.billingCycle === 'yearly' ? 365 : 30) *
+          24 *
+          60 *
+          60 *
+          1000,
     );
     subscription.lastPaymentReference = payment.reference;
 
@@ -456,10 +517,15 @@ export class BillingService {
   }
 
   async handleWebhook(payload: Record<string, any>, signature?: string) {
-    const secret = process.env.PAYSTACK_WEBHOOK_SECRET || process.env.PAYSTACK_SECRET_KEY;
-    if (!secret) throw new BadRequestException('Paystack webhook secret not configured');
+    const secret =
+      process.env.PAYSTACK_WEBHOOK_SECRET || process.env.PAYSTACK_SECRET_KEY;
+    if (!secret)
+      throw new BadRequestException('Paystack webhook secret not configured');
 
-    const computed = crypto.createHmac('sha512', secret).update(JSON.stringify(payload)).digest('hex');
+    const computed = crypto
+      .createHmac('sha512', secret)
+      .update(JSON.stringify(payload))
+      .digest('hex');
     if (!signature || signature !== computed) {
       throw new ForbiddenException('Invalid webhook signature');
     }
@@ -471,14 +537,18 @@ export class BillingService {
     }
 
     if (event === 'charge.success') {
-      const payment = await this.paymentsRepository.findOne({ where: { reference } });
+      const payment = await this.paymentsRepository.findOne({
+        where: { reference },
+      });
       if (!payment) return { received: true, ignored: true };
       await this.applySuccessfulPayment(payment, payload);
       return { received: true, processed: true };
     }
 
     if (event === 'charge.failed') {
-      const payment = await this.paymentsRepository.findOne({ where: { reference } });
+      const payment = await this.paymentsRepository.findOne({
+        where: { reference },
+      });
       if (payment && payment.status !== 'success') {
         payment.status = 'failed';
         payment.rawResponse = payload;

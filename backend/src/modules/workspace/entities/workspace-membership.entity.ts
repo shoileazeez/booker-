@@ -22,7 +22,9 @@ export class WorkspaceMembership {
   @JoinColumn({ name: 'user_id' })
   user: User;
 
-  @ManyToOne(() => Workspace, (workspace) => workspace.memberships, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Workspace, (workspace) => workspace.memberships, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'workspace_id' })
   workspace: Workspace;
 

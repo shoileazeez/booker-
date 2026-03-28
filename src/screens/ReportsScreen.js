@@ -5,6 +5,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { Card, Subtle, EmptyState, SkeletonBlock } from '../components/UI';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { api } from '../api/client';
+import { cacheTransactions, getCachedTransactions } from '../storage/offlineStore';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -12,7 +13,7 @@ import * as Sharing from 'expo-sharing';
 export default function ReportsScreen({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const { currentWorkspaceId } = useWorkspace();
+  const { currentWorkspaceId, repo } = useWorkspace();
   const { width } = useWindowDimensions();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -30,6 +31,19 @@ export default function ReportsScreen({ navigation }) {
 
         setLoading(true);
         try {
+          const localRows = await repo.getTransactions();
+          const localList = [];
+          if (localRows?.rows?.length > 0) {
+            for (let i = 0; i < localRows.rows.length; i += 1) {
+              const row = localRows.rows.item(i);
+              const data = row.data ? JSON.parse(row.data) : {};
+              localList.push({ ...data, id: data.id ?? row.server_id ?? row.local_id, local_id: row.local_id, sync_status: row.sync_status });
+            }
+          }
+          if (mounted && localList.length > 0) {
+            setTransactions(localList);
+          }
+
           const list = await api.get(`/workspaces/${currentWorkspaceId}/transactions`, {
             skip: 0,
             take: 500,
@@ -37,9 +51,11 @@ export default function ReportsScreen({ navigation }) {
           if (mounted) {
             setTransactions(Array.isArray(list) ? list : []);
           }
+          cacheTransactions(currentWorkspaceId, null, Array.isArray(list) ? list : []).catch(() => null);
         } catch (err) {
           if (mounted) {
-            setTransactions([]);
+            const cached = await getCachedTransactions(currentWorkspaceId);
+            setTransactions(Array.isArray(cached) ? cached : []);
           }
         } finally {
           if (mounted) {
@@ -53,7 +69,7 @@ export default function ReportsScreen({ navigation }) {
       return () => {
         mounted = false;
       };
-    }, [currentWorkspaceId])
+    }, [currentWorkspaceId, repo])
   );
 
   const formatCurrency = (value) => `₦${Number(value || 0).toLocaleString()}`;
