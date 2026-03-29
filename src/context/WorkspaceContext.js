@@ -4,7 +4,7 @@ const BACKOFF_BASE_MS = 1500;
 const MAX_RETRIES = 5;
 const isLocalEntityId = (value) => typeof value === 'string' && value.startsWith('local_');
 
-async function syncCoordinatorWorker({ token, currentWorkspaceId }) {
+async function syncCoordinatorWorker({ token, currentWorkspaceId, currentBranchId }) {
   if (syncWorkerActive) return;
   syncWorkerActive = true;
   try {
@@ -25,15 +25,14 @@ async function syncCoordinatorWorker({ token, currentWorkspaceId }) {
         }
         if (parentExists) continue;
       }
-      // Map workspace_ref if needed
-      let workspaceId = action.workspace_ref;
-      if (workspaceId && workspaceId.startsWith('local_')) {
-        const mapped = await offlineStore.getServerId('workspace', workspaceId);
+      // Map branch ref if needed
+      let branchId = action.workspace_ref;
+      if (branchId && branchId.startsWith('local_')) {
+        const mapped = await offlineStore.getServerId('workspace', branchId);
         if (!mapped) {
-          // Can't sync child until workspace is mapped
           continue;
         }
-        workspaceId = mapped;
+        branchId = mapped;
       }
       try {
         const payload = action.payload ? JSON.parse(action.payload) : undefined;
@@ -60,11 +59,11 @@ async function syncCoordinatorWorker({ token, currentWorkspaceId }) {
           // Fetch remote row (if online)
           try {
             if (entityType === 'inventory') {
-              remoteRow = await api.get(`/workspaces/${workspaceId}/inventory/${serverId}`);
+              remoteRow = await api.get(`/workspaces/${currentWorkspaceId}/branches/${branchId}/inventory/${serverId}`);
             } else if (entityType === 'transaction' || entityType === 'debt') {
-              remoteRow = await api.get(`/workspaces/${workspaceId}/transactions/${serverId}`);
+              remoteRow = await api.get(`/workspaces/${currentWorkspaceId}/branches/${branchId}/transactions/${serverId}`);
             } else if (entityType === 'customer') {
-              remoteRow = await api.get(`/workspaces/${workspaceId}/customers/${serverId}`);
+              remoteRow = await api.get(`/workspaces/${currentWorkspaceId}/branches/${branchId}/customers/${serverId}`);
             }
             remoteUpdated = new Date(remoteRow?.updatedAt || remoteRow?.updated_at || 0).getTime();
             // If both changed since last sync, mark conflict
@@ -87,14 +86,14 @@ async function syncCoordinatorWorker({ token, currentWorkspaceId }) {
             await offlineStore.setIdMapping('workspace', action.entity_local_id, apiRes.id);
           }
         } else if (action.action_type === 'create_inventory') {
-          apiRes = await api.post(`/workspaces/${workspaceId}/inventory`, syncPayload);
+          apiRes = await api.post(`/workspaces/${currentWorkspaceId}/branches/${branchId}/inventory`, syncPayload);
           if (apiRes?.id) {
             await offlineStore.setIdMapping('inventory', action.entity_local_id, apiRes.id);
           }
         } else if (action.action_type === 'update_inventory') {
-          apiRes = await api.put(`/workspaces/${workspaceId}/inventory/${serverId}`, syncPayload);
+          apiRes = await api.put(`/workspaces/${currentWorkspaceId}/branches/${branchId}/inventory/${serverId}`, syncPayload);
         } else if (action.action_type === 'delete_inventory') {
-          apiRes = await api.delete(`/workspaces/${workspaceId}/inventory/${serverId}`);
+          apiRes = await api.delete(`/workspaces/${currentWorkspaceId}/branches/${branchId}/inventory/${serverId}`);
         } else if (action.action_type === 'create_transaction') {
           if (isLocalEntityId(syncPayload?.itemId)) {
             const mappedItemId = await offlineStore.getServerId('inventory', syncPayload.itemId);
@@ -103,32 +102,32 @@ async function syncCoordinatorWorker({ token, currentWorkspaceId }) {
             }
             syncPayload = { ...syncPayload, itemId: mappedItemId };
           }
-          apiRes = await api.post(`/workspaces/${workspaceId}/transactions`, syncPayload);
+          apiRes = await api.post(`/workspaces/${currentWorkspaceId}/branches/${branchId}/transactions`, syncPayload);
           if (apiRes?.id) {
             await offlineStore.setIdMapping('transaction', action.entity_local_id, apiRes.id);
           }
         } else if (action.action_type === 'update_transaction') {
-          apiRes = await api.put(`/workspaces/${workspaceId}/transactions/${serverId}`, syncPayload);
+          apiRes = await api.put(`/workspaces/${currentWorkspaceId}/branches/${branchId}/transactions/${serverId}`, syncPayload);
         } else if (action.action_type === 'delete_transaction') {
-          apiRes = await api.delete(`/workspaces/${workspaceId}/transactions/${serverId}`);
+          apiRes = await api.delete(`/workspaces/${currentWorkspaceId}/branches/${branchId}/transactions/${serverId}`);
         } else if (action.action_type === 'create_debt') {
-          apiRes = await api.post(`/workspaces/${workspaceId}/transactions`, syncPayload);
+          apiRes = await api.post(`/workspaces/${currentWorkspaceId}/branches/${branchId}/transactions`, syncPayload);
           if (apiRes?.id) {
             await offlineStore.setIdMapping('debt', action.entity_local_id, apiRes.id);
           }
         } else if (action.action_type === 'update_debt') {
-          apiRes = await api.put(`/workspaces/${workspaceId}/transactions/${serverId}`, syncPayload);
+          apiRes = await api.put(`/workspaces/${currentWorkspaceId}/branches/${branchId}/transactions/${serverId}`, syncPayload);
         } else if (action.action_type === 'delete_debt') {
-          apiRes = await api.delete(`/workspaces/${workspaceId}/transactions/${serverId}`);
+          apiRes = await api.delete(`/workspaces/${currentWorkspaceId}/branches/${branchId}/transactions/${serverId}`);
         } else if (action.action_type === 'create_customer') {
-          apiRes = await api.post(`/workspaces/${workspaceId}/customers`, syncPayload);
+          apiRes = await api.post(`/workspaces/${currentWorkspaceId}/branches/${branchId}/customers`, syncPayload);
           if (apiRes?.id) {
             await offlineStore.setIdMapping('customer', action.entity_local_id, apiRes.id);
           }
         } else if (action.action_type === 'update_customer') {
-          apiRes = await api.put(`/workspaces/${workspaceId}/customers/${serverId}`, syncPayload);
+          apiRes = await api.put(`/workspaces/${currentWorkspaceId}/branches/${branchId}/customers/${serverId}`, syncPayload);
         } else if (action.action_type === 'delete_customer') {
-          apiRes = await api.delete(`/workspaces/${workspaceId}/customers/${serverId}`);
+          apiRes = await api.delete(`/workspaces/${currentWorkspaceId}/branches/${branchId}/customers/${serverId}`);
         }
 
         if (action.action_type.startsWith('create_')) {
@@ -147,11 +146,11 @@ async function syncCoordinatorWorker({ token, currentWorkspaceId }) {
               await upsertByType({
                 local_id: action.entity_local_id,
                 server_id: String(apiRes.id),
-                workspace_server_id: workspaceId,
+                workspace_server_id: branchId,
                 data: { ...currentData, ...syncPayload, ...apiRes, id: apiRes.id, local_id: action.entity_local_id },
                 sync_status: 'synced',
                 updated_at_local: Date.now(),
-              }, workspaceId);
+              }, branchId);
             }
           }
         } else if (action.action_type.startsWith('update_')) {
@@ -164,7 +163,7 @@ async function syncCoordinatorWorker({ token, currentWorkspaceId }) {
             customer: offlineStore.deleteLocalCustomer,
           }[action.entity_type];
           if (deleteByType) {
-            await deleteByType(action.entity_local_id, workspaceId);
+            await deleteByType(action.entity_local_id, branchId);
           }
         }
 
@@ -203,6 +202,7 @@ import * as offlineStore from '../storage/offlineStore';
 
 const WorkspaceContext = createContext();
 const WORKSPACE_STORAGE_KEY = '@booker:currentWorkspace';
+const BRANCH_STORAGE_KEY = '@booker:currentBranch';
 const OFFLINE_QUEUE_KEY = '@booker:queuedActions';
 const LAST_SYNC_STORAGE_KEY = '@booker:lastSyncAt';
 
@@ -218,30 +218,33 @@ const stampLocalEntityDates = (payload = {}, now = Date.now()) => {
 };
 
 const parseActionRoute = (path = '') => {
-  const inventory = path.match(/^\/workspaces\/([^/]+)\/inventory(?:\/([^/]+))?$/);
+  const inventory = path.match(/^\/workspaces\/([^/]+)\/branches\/([^/]+)\/inventory(?:\/([^/]+))?$/);
   if (inventory) {
     return {
       workspaceId: inventory[1],
+      branchId: inventory[2],
       domain: 'inventory',
-      targetId: inventory[2] || null,
+      targetId: inventory[3] || null,
     };
   }
 
-  const transactions = path.match(/^\/workspaces\/([^/]+)\/transactions(?:\/([^/]+))?$/);
+  const transactions = path.match(/^\/workspaces\/([^/]+)\/branches\/([^/]+)\/transactions(?:\/([^/]+))?$/);
   if (transactions) {
     return {
       workspaceId: transactions[1],
+      branchId: transactions[2],
       domain: 'transactions',
-      targetId: transactions[2] || null,
+      targetId: transactions[3] || null,
     };
   }
 
-  const customers = path.match(/^\/workspaces\/([^/]+)\/customers(?:\/([^/]+))?$/);
+  const customers = path.match(/^\/workspaces\/([^/]+)\/branches\/([^/]+)\/customers(?:\/([^/]+))?$/);
   if (customers) {
     return {
       workspaceId: customers[1],
+      branchId: customers[2],
       domain: 'customers',
-      targetId: customers[2] || null,
+      targetId: customers[3] || null,
     };
   }
 
@@ -252,7 +255,9 @@ export const WorkspaceProvider = function({ children }) {
   const { token } = useAuth();
 
   const [workspaces, setWorkspaces] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState(null);
+  const [currentBranchId, setCurrentBranchId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pendingActions, setPendingActions] = useState([]);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
@@ -271,6 +276,25 @@ export const WorkspaceProvider = function({ children }) {
       const stored = await AsyncStorage.getItem(WORKSPACE_STORAGE_KEY);
       if (stored) {
         setCurrentWorkspaceId(stored);
+      }
+    } catch (err) {
+      // ignore
+    }
+  };
+
+  const persistBranchId = async (id) => {
+    try {
+      await AsyncStorage.setItem(BRANCH_STORAGE_KEY, id || '');
+    } catch (err) {
+      // ignore
+    }
+  };
+
+  const loadStoredBranchId = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(BRANCH_STORAGE_KEY);
+      if (stored) {
+        setCurrentBranchId(stored);
       }
     } catch (err) {
       // ignore
@@ -358,12 +382,12 @@ export const WorkspaceProvider = function({ children }) {
 
   const queueStructuredAction = useCallback(async (action) => {
     const route = parseActionRoute(action?.path);
-    if (!route || !route.workspaceId) {
+    if (!route || !route.workspaceId || !route.branchId) {
       await enqueueOfflineAction(action);
       return;
     }
 
-    const workspaceRef = String(route.workspaceId);
+    const workspaceRef = String(route.branchId);
     const now = Date.now();
 
     if (route.domain === 'inventory') {
@@ -538,8 +562,12 @@ export const WorkspaceProvider = function({ children }) {
 
   const queueAction = useCallback(async (action) => {
     await queueStructuredAction(action);
-    syncCoordinatorWorker({ token, currentWorkspaceId: action?.workspaceId || currentWorkspaceId });
-  }, [currentWorkspaceId, queueStructuredAction, token]);
+    syncCoordinatorWorker({
+      token,
+      currentWorkspaceId: action?.workspaceId || currentWorkspaceId,
+      currentBranchId: action?.branchId || currentBranchId,
+    });
+  }, [currentBranchId, currentWorkspaceId, queueStructuredAction, token]);
 
   const syncInfo = useMemo(
     () => ({
@@ -555,6 +583,11 @@ export const WorkspaceProvider = function({ children }) {
     if (!Array.isArray(workspaces) || workspaces.length === 0) return null;
     return workspaces.find((item) => String(item.id) === String(currentWorkspaceId)) || workspaces[0] || null;
   }, [currentWorkspaceId, workspaces]);
+
+  const currentBranch = useMemo(() => {
+    if (!Array.isArray(branches) || branches.length === 0) return null;
+    return branches.find((item) => String(item.id) === String(currentBranchId)) || branches[0] || null;
+  }, [branches, currentBranchId]);
 
   const workspaceAccessBlocked = !!currentWorkspace && String(currentWorkspace?.status || 'active').toLowerCase() !== 'active';
 
@@ -617,28 +650,51 @@ export const WorkspaceProvider = function({ children }) {
     }
   }, [token, applyOfflineWorkspacesFallback]);
 
-  const hydrateWorkspaceSnapshot = useCallback(async (workspaceId) => {
-    if (!token || !workspaceId) return;
+  const loadBranches = useCallback(async (workspaceId) => {
+    if (!token || !workspaceId) {
+      setBranches([]);
+      setCurrentBranchId(null);
+      return;
+    }
+
+    try {
+      const data = await api.get(`/workspaces/${workspaceId}/branches`);
+      const list = Array.isArray(data) ? data : [];
+      setBranches(list);
+      setCurrentBranchId((prev) => {
+        if (prev && list.some((branch) => String(branch.id) === String(prev))) {
+          return prev;
+        }
+        return list[0]?.id || null;
+      });
+    } catch (err) {
+      setBranches([]);
+      setCurrentBranchId(null);
+    }
+  }, [token]);
+
+  const hydrateWorkspaceSnapshot = useCallback(async (workspaceId, branchId) => {
+    if (!token || !workspaceId || !branchId) return;
 
     try {
       const [inventory, transactions, customers] = await Promise.all([
-        api.get(`/workspaces/${workspaceId}/inventory`).catch(() => null),
-        api.get(`/workspaces/${workspaceId}/transactions`, { skip: 0, take: 500 }).catch(() => null),
-        api.get(`/workspaces/${workspaceId}/customers`).catch(() => null),
+        api.get(`/workspaces/${workspaceId}/branches/${branchId}/inventory`).catch(() => null),
+        api.get(`/workspaces/${workspaceId}/branches/${branchId}/transactions`, { skip: 0, take: 500 }).catch(() => null),
+        api.get(`/workspaces/${workspaceId}/branches/${branchId}/customers`).catch(() => null),
       ]);
 
       if (Array.isArray(inventory)) {
-        await offlineStore.cacheInventory(workspaceId, inventory);
+        await offlineStore.cacheInventory(branchId, inventory);
       }
       if (Array.isArray(transactions)) {
-        await offlineStore.cacheTransactions(workspaceId, null, transactions);
+        await offlineStore.cacheTransactions(branchId, null, transactions);
         await offlineStore.cacheDebts(
-          workspaceId,
+          branchId,
           transactions.filter((item) => String(item?.type || '').toLowerCase() === 'debt')
         );
       }
       if (Array.isArray(customers)) {
-        await offlineStore.cacheCustomers(workspaceId, customers);
+        await offlineStore.cacheCustomers(branchId, customers);
       }
     } catch (err) {
       // Best-effort hydration only.
@@ -647,6 +703,7 @@ export const WorkspaceProvider = function({ children }) {
 
   useEffect(() => {
     loadStoredWorkspaceId();
+    loadStoredBranchId();
     loadPendingActions();
     loadLastSyncedAt();
   }, []);
@@ -656,48 +713,66 @@ export const WorkspaceProvider = function({ children }) {
   }, [loadWorkspaces]);
 
   useEffect(() => {
-    // Attempt to sync queued work whenever the auth token or workspace changes
-    if (token && currentWorkspaceId) {
-      syncCoordinatorWorker({ token, currentWorkspaceId });
-      hydrateWorkspaceSnapshot(currentWorkspaceId);
+    if (currentWorkspaceId) {
+      loadBranches(currentWorkspaceId);
+    } else {
+      setBranches([]);
+      setCurrentBranchId(null);
     }
-  }, [token, currentWorkspaceId, hydrateWorkspaceSnapshot]);
+  }, [currentWorkspaceId, loadBranches]);
 
   useEffect(() => {
-    if (token && currentWorkspaceId && pendingActions.length > 0) {
+    if (token && currentWorkspaceId && currentBranchId) {
+      syncCoordinatorWorker({ token, currentWorkspaceId, currentBranchId });
+      hydrateWorkspaceSnapshot(currentWorkspaceId, currentBranchId);
+    }
+  }, [token, currentWorkspaceId, currentBranchId, hydrateWorkspaceSnapshot]);
+
+  useEffect(() => {
+    if (token && currentWorkspaceId && currentBranchId && pendingActions.length > 0) {
       processPendingActions();
     }
-  }, [token, currentWorkspaceId, pendingActions.length, processPendingActions]);
+  }, [token, currentWorkspaceId, currentBranchId, pendingActions.length, processPendingActions]);
 
   useEffect(() => {
     persistWorkspaceId(currentWorkspaceId);
   }, [currentWorkspaceId]);
 
+  useEffect(() => {
+    persistBranchId(currentBranchId);
+  }, [currentBranchId]);
+
   // --- Workspace-scoped repository abstraction ---
   // All local entity access must use currentWorkspaceId (local)
   const repo = useMemo(() => ({
-    getInventory: () => offlineStore.getLocalInventory(currentWorkspaceId),
-    getTransactions: () => offlineStore.getLocalTransactions(currentWorkspaceId),
-    getDebts: () => offlineStore.getLocalDebts(currentWorkspaceId),
-    getCustomers: () => offlineStore.getLocalCustomers(currentWorkspaceId),
-    upsertInventory: (item) => offlineStore.upsertLocalInventory(item, currentWorkspaceId),
-    upsertTransaction: (item) => offlineStore.upsertLocalTransaction(item, currentWorkspaceId),
-    upsertDebt: (item) => offlineStore.upsertLocalDebt(item, currentWorkspaceId),
-    upsertCustomer: (item) => offlineStore.upsertLocalCustomer(item, currentWorkspaceId),
-    deleteInventory: (localId) => offlineStore.deleteLocalInventory(localId, currentWorkspaceId),
-    deleteTransaction: (localId) => offlineStore.deleteLocalTransaction(localId, currentWorkspaceId),
-    deleteDebt: (localId) => offlineStore.deleteLocalDebt(localId, currentWorkspaceId),
-    deleteCustomer: (localId) => offlineStore.deleteLocalCustomer(localId, currentWorkspaceId),
+    getInventory: () => offlineStore.getLocalInventory(currentBranchId),
+    getTransactions: () => offlineStore.getLocalTransactions(currentBranchId),
+    getDebts: () => offlineStore.getLocalDebts(currentBranchId),
+    getCustomers: () => offlineStore.getLocalCustomers(currentBranchId),
+    upsertInventory: (item) => offlineStore.upsertLocalInventory(item, currentBranchId),
+    upsertTransaction: (item) => offlineStore.upsertLocalTransaction(item, currentBranchId),
+    upsertDebt: (item) => offlineStore.upsertLocalDebt(item, currentBranchId),
+    upsertCustomer: (item) => offlineStore.upsertLocalCustomer(item, currentBranchId),
+    deleteInventory: (localId) => offlineStore.deleteLocalInventory(localId, currentBranchId),
+    deleteTransaction: (localId) => offlineStore.deleteLocalTransaction(localId, currentBranchId),
+    deleteDebt: (localId) => offlineStore.deleteLocalDebt(localId, currentBranchId),
+    deleteCustomer: (localId) => offlineStore.deleteLocalCustomer(localId, currentBranchId),
     queueAction,
-  }), [currentWorkspaceId, queueAction]);
+  }), [currentBranchId, queueAction]);
 
   const value = useMemo(
     () => ({
       workspaces,
+      branches,
       currentWorkspace,
+      currentBranch,
       setWorkspaces,
+      setBranches,
       currentWorkspaceId,
       setCurrentWorkspaceId,
+      currentBranchId,
+      setCurrentBranchId,
+      activeBranchId: currentBranchId,
       workspaceAccessBlocked,
       loading,
       syncInfo,
@@ -708,8 +783,11 @@ export const WorkspaceProvider = function({ children }) {
     }),
     [
       workspaces,
+      branches,
       currentWorkspace,
+      currentBranch,
       currentWorkspaceId,
+      currentBranchId,
       workspaceAccessBlocked,
       loading,
       syncInfo,

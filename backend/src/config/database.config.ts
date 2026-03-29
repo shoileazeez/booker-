@@ -4,7 +4,11 @@ import { User } from '../modules/auth/entities/user.entity';
 import { Workspace } from '../modules/workspace/entities/workspace.entity';
 import { WorkspaceInvite } from '../modules/workspace/entities/invite.entity';
 import { WorkspaceMembership } from '../modules/workspace/entities/workspace-membership.entity';
+import { Branch } from '../modules/workspace/entities/branch.entity';
+import { BranchMembership } from '../modules/workspace/entities/branch-membership.entity';
+import { AuditLog } from '../modules/workspace/entities/audit-log.entity';
 import { InventoryItem } from '../modules/inventory/entities/inventory-item.entity';
+import { StockTransfer } from '../modules/inventory/entities/stock-transfer.entity';
 import { Transaction } from '../modules/transactions/entities/transaction.entity';
 import { Subscription } from '../modules/billing/entities/subscription.entity';
 import { Payment } from '../modules/billing/entities/payment.entity';
@@ -32,7 +36,11 @@ export const databaseConfig = (): TypeOrmModuleOptions => {
       Workspace,
       WorkspaceInvite,
       WorkspaceMembership,
+      Branch,
+      BranchMembership,
+      AuditLog,
       InventoryItem,
+      StockTransfer,
       Transaction,
       Subscription,
       Payment,
@@ -67,7 +75,11 @@ const entities = [
   Workspace,
   WorkspaceInvite,
   WorkspaceMembership,
+  Branch,
+  BranchMembership,
+  AuditLog,
   InventoryItem,
+  StockTransfer,
   Transaction,
   Subscription,
   Payment,

@@ -27,12 +27,14 @@ const SettingsScreen = function({ navigation }) {
   const { width } = useWindowDimensions();
 
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
+  const [showBranchModal, setShowBranchModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradePayload, setUpgradePayload] = useState(null);
   const [pendingInviteCount, setPendingInviteCount] = useState(0);
   const [pendingInviteUnavailable, setPendingInviteUnavailable] = useState(false);
 
   const currentWorkspace = workspace.currentWorkspace || workspace.workspaces.find((w) => w.id === workspace.currentWorkspaceId);
+  const currentBranch = workspace.currentBranch || workspace.branches?.find((b) => b.id === workspace.currentBranchId);
   const workspaceAccessBlocked = !!currentWorkspace && String(currentWorkspace?.status || 'active').toLowerCase() !== 'active';
   const userRole = currentWorkspace?.role || user?.role || 'user';
   const canManageWorkspace = !workspaceAccessBlocked && (userRole === 'owner' || userRole === 'manager');
@@ -224,6 +226,36 @@ const SettingsScreen = function({ navigation }) {
 
         <View style={styles.settingItem}>
           <View style={styles.settingInfo}>
+            <MaterialIcons name="storefront" size={24} color={theme.colors.primary} />
+            <View style={styles.settingText}>
+              <Text style={[styles.settingTitle, { color: theme.colors.textPrimary }]}>Active Branch</Text>
+              <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>
+                {currentBranch?.name || 'No branch selected'}
+              </Text>
+              <View style={styles.scopeBadgeRow}>
+                <View style={[styles.scopeBadge, { backgroundColor: `${theme.colors.primary}18` }]}>
+                  <Text style={[styles.scopeBadgeText, { color: theme.colors.primary }]}>
+                    {userRole === 'owner' ? 'Owner: all branches' : 'Scoped to branch'}
+                  </Text>
+                </View>
+                <View style={[styles.scopeBadge, { backgroundColor: `${theme.colors.warning}18` }]}>
+                  <Text style={[styles.scopeBadgeText, { color: theme.colors.warning }]}>
+                    {currentBranch ? 'Permissions active' : 'Pick a branch'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={() => setShowBranchModal(true)}
+            disabled={!workspace.branches?.length}
+          >
+            <MaterialIcons name="swap-horiz" size={24} color={theme.colors.primary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.settingItem}>
+          <View style={styles.settingInfo}>
             <MaterialIcons name="login" size={24} color={theme.colors.primary} />
             <View style={styles.settingText}>
               <Text style={[styles.settingTitle, { color: theme.colors.textPrimary }]}>Join Workspace</Text>
@@ -382,6 +414,68 @@ const SettingsScreen = function({ navigation }) {
               <TouchableOpacity
                 style={[styles.modalButton, styles.updateButton, { backgroundColor: theme.colors.primary }]}
                 onPress={() => setShowWorkspaceModal(false)}
+              >
+                <Text style={styles.updateButtonText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showBranchModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowBranchModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.card, maxHeight: '80%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>Switch Branch</Text>
+              <TouchableOpacity onPress={() => setShowBranchModal(false)}>
+                <MaterialIcons name="close" size={24} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              {(workspace.branches || []).map((branch) => {
+                const isCurrentBranch = branch.id === workspace.currentBranchId;
+                return (
+                  <TouchableOpacity
+                    key={branch.id}
+                    style={[
+                      styles.workspaceItem,
+                      {
+                        backgroundColor: isCurrentBranch ? `${theme.colors.primary}20` : 'transparent',
+                        borderColor: isCurrentBranch ? theme.colors.primary : theme.colors.border,
+                      },
+                    ]}
+                    onPress={() => {
+                      workspace.setCurrentBranchId(branch.id);
+                      setShowBranchModal(false);
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.roleAssignmentUserName, { color: theme.colors.textPrimary }]}>
+                        {branch.name}
+                        {isCurrentBranch ? ' ✓' : ''}
+                      </Text>
+                      <Text style={[styles.roleAssignmentCurrentRole, { color: theme.colors.textSecondary }]}>
+                        {branch.location || branch.status || 'active'}
+                      </Text>
+                    </View>
+                    {isCurrentBranch ? (
+                      <MaterialIcons name="check-circle" size={20} color={theme.colors.primary} />
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.updateButton, { backgroundColor: theme.colors.primary }]}
+                onPress={() => setShowBranchModal(false)}
               >
                 <Text style={styles.updateButtonText}>Done</Text>
               </TouchableOpacity>
@@ -599,6 +693,22 @@ const styles = StyleSheet.create({
   },
   inviteCountText: {
     color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  scopeBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 8,
+  },
+  scopeBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginRight: 8,
+    marginBottom: 4,
+  },
+  scopeBadgeText: {
     fontSize: 11,
     fontWeight: '700',
   },

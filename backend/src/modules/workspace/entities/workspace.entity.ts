@@ -12,6 +12,7 @@ import { User } from '../../auth/entities/user.entity';
 import { InventoryItem } from '../../inventory/entities/inventory-item.entity';
 import { Transaction } from '../../transactions/entities/transaction.entity';
 import { WorkspaceMembership } from './workspace-membership.entity';
+import { Branch } from './branch.entity';
 
 @Entity('workspaces')
 export class Workspace {
@@ -55,6 +56,9 @@ export class Workspace {
 
   @OneToMany(() => Workspace, (workspace) => workspace.parentWorkspace)
   branches: Workspace[];
+
+  @OneToMany(() => Branch, (branch) => branch.workspace)
+  branchRecords: Branch[];
 
   @OneToMany(() => WorkspaceMembership, (membership) => membership.workspace)
   memberships: WorkspaceMembership[];

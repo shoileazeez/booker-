@@ -293,12 +293,22 @@ export default function TeamManagementScreen({ navigation }) {
       <Card style={styles.section}>
         <View style={styles.sectionHeaderRow}>
           <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Branches</Text>
-          <TouchableOpacity onPress={() => navigation.push('BranchList')}>
-            <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Open all</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity onPress={() => navigation.push('AuditLogs')} style={{ marginRight: 14 }}>
+              <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Audit logs</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.push('BranchList')}>
+              <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Open all</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         {overview?.branches?.length ? overview.branches.map((branch) => (
-          <View key={branch.id} style={[styles.simpleRow, { borderColor: theme.colors.border }]}>
+          <TouchableOpacity
+            key={branch.id}
+            style={[styles.simpleRow, { borderColor: theme.colors.border }]}
+            onPress={() => navigation.push('BranchDetail', { branchId: branch.id })}
+            activeOpacity={0.8}
+          >
             <View style={{ flex: 1 }}>
               <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>{branch.name}</Text>
               <Subtle>
@@ -314,7 +324,7 @@ export default function TeamManagementScreen({ navigation }) {
               </Text>
               <Subtle>Pending debt</Subtle>
             </View>
-          </View>
+          </TouchableOpacity>
         )) : (
           <EmptyState icon="account-tree" title="No branches yet" subtitle="Create branches to split teams and track performance." />
         )}
@@ -323,10 +333,10 @@ export default function TeamManagementScreen({ navigation }) {
       <Card style={styles.section}>
         <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Staff Sales Performance</Text>
         {overview?.staffPerformance?.length ? overview.staffPerformance.map((item, index) => (
-          <View key={`${item.userId}-${item.workspaceId}-${index}`} style={[styles.simpleRow, { borderColor: theme.colors.border }]}>
+          <View key={`${item.userId}-${item.branchId}-${index}`} style={[styles.simpleRow, { borderColor: theme.colors.border }]}>
             <View style={{ flex: 1 }}>
               <Text style={{ color: theme.colors.textPrimary, fontWeight: '600' }}>{item.name}</Text>
-              <Subtle>{item.workspaceName}</Subtle>
+              <Subtle>{item.branchName}</Subtle>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>

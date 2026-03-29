@@ -72,14 +72,18 @@ const buildOfflineFallback = async (path, query) => {
     return getOfflineWorkspacesForUi();
   }
 
-  const inventoryMatch = path.match(/^\/workspaces\/([^/]+)\/inventory$/);
+  const inventoryMatch = path.match(
+    /^\/workspaces\/([^/]+)\/branches\/([^/]+)\/inventory$/,
+  );
   if (inventoryMatch) {
-    return getCachedInventory(inventoryMatch[1]);
+    return getCachedInventory(inventoryMatch[2]);
   }
 
-  const transactionsMatch = path.match(/^\/workspaces\/([^/]+)\/transactions$/);
+  const transactionsMatch = path.match(
+    /^\/workspaces\/([^/]+)\/branches\/([^/]+)\/transactions$/,
+  );
   if (transactionsMatch) {
-    const workspaceId = transactionsMatch[1];
+    const workspaceId = transactionsMatch[2];
     const type = query?.type;
     let list = await getCachedTransactions(workspaceId, type);
 
@@ -94,9 +98,11 @@ const buildOfflineFallback = async (path, query) => {
     return list;
   }
 
-  const customersMatch = path.match(/^\/workspaces\/([^/]+)\/customers$/);
+  const customersMatch = path.match(
+    /^\/workspaces\/([^/]+)\/branches\/([^/]+)\/customers$/,
+  );
   if (customersMatch) {
-    return getCachedCustomers(customersMatch[1], query?.search);
+    return getCachedCustomers(customersMatch[2], query?.search);
   }
 
   return null;

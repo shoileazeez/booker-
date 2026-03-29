@@ -10,7 +10,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 export default function TransactionsScreen({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const { currentWorkspaceId, repo } = useWorkspace();
+  const { currentWorkspaceId, activeBranchId, repo } = useWorkspace();
   const { width } = useWindowDimensions();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -18,7 +18,7 @@ export default function TransactionsScreen({ navigation }) {
 
   useEffect(() => {
     const loadTransactions = async () => {
-      if (!currentWorkspaceId) {
+      if (!currentWorkspaceId || !activeBranchId) {
         setTransactions([]);
         return;
       }
@@ -43,12 +43,12 @@ export default function TransactionsScreen({ navigation }) {
           setTransactions(localList);
         }
 
-        const data = await api.get(`/workspaces/${currentWorkspaceId}/transactions`, { take: 50 });
+        const data = await api.get(`/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/transactions`, { take: 50 });
         const list = Array.isArray(data) ? data : [];
         setTransactions(list);
-        cacheTransactions(currentWorkspaceId, null, list).catch(() => null);
+        cacheTransactions(activeBranchId, null, list).catch(() => null);
       } catch (err) {
-        const cached = await getCachedTransactions(currentWorkspaceId);
+        const cached = await getCachedTransactions(activeBranchId);
         setTransactions(Array.isArray(cached) ? cached : []);
       } finally {
         setLoading(false);
@@ -56,7 +56,7 @@ export default function TransactionsScreen({ navigation }) {
     };
 
     loadTransactions();
-  }, [currentWorkspaceId, repo]);
+  }, [currentWorkspaceId, activeBranchId, repo]);
 
   const renderAmount = useMemo(() => {
     return (item) => `₦${Number(item.totalAmount || 0).toLocaleString()}`;
@@ -144,3 +144,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+

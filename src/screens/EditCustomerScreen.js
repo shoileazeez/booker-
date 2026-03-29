@@ -9,7 +9,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 export default function EditCustomerScreen({ route, navigation }) {
   const { theme } = useTheme();
-  const { currentWorkspaceId, queueAction } = useWorkspace();
+  const { currentWorkspaceId, activeBranchId, queueAction } = useWorkspace();
   const customer = route?.params?.customer;
   const [name, setName] = useState(customer?.name || '');
   const [email, setEmail] = useState(customer?.email || '');
@@ -26,27 +26,27 @@ export default function EditCustomerScreen({ route, navigation }) {
     try {
       const payload = { name, email, phone, address };
       const localId = customer.local_id || customer.id;
-      await api.put(`/workspaces/${currentWorkspaceId}/customers/${customer.id}`, payload);
+      await api.put(`/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/customers/${customer.id}`, payload);
       await upsertLocalCustomer({
         local_id: localId,
         server_id: String(customer.id),
-        workspace_server_id: currentWorkspaceId,
+        workspace_server_id: activeBranchId,
         data: { ...customer, ...payload, id: customer.id, local_id: localId },
         sync_status: 'synced',
-      }, currentWorkspaceId);
+      }, activeBranchId);
       navigation.goBack();
     } catch (err) {
       if (!err?.response && queueAction) {
         await upsertLocalCustomer({
           local_id: customer.local_id || customer.id,
           server_id: String(customer.id).startsWith('local_') ? null : String(customer.id),
-          workspace_server_id: currentWorkspaceId,
+          workspace_server_id: activeBranchId,
           data: { ...customer, name, email, phone, address, id: customer.id, local_id: customer.local_id || customer.id },
           sync_status: 'pending_update',
-        }, currentWorkspaceId);
+        }, activeBranchId);
         await queueAction({
           method: 'put',
-          path: `/workspaces/${currentWorkspaceId}/customers/${customer.id}`,
+          path: `/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/customers/${customer.id}`,
           body: { name, email, phone, address },
         });
         Alert.alert('Offline', 'Customer update saved locally and will sync once online');
@@ -89,3 +89,4 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 12, fontSize: 16 },
   button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 8, marginTop: 16 },
 });
+

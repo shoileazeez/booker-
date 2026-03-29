@@ -10,6 +10,12 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { InventoryItem } from '../inventory/entities/inventory-item.entity';
 import { WorkspaceMembership } from './entities/workspace-membership.entity';
+import { Branch } from './entities/branch.entity';
+import { BranchMembership } from './entities/branch-membership.entity';
+import { BranchAccessService } from './branch-access.service';
+import { Customer } from '../customer/customer.entity';
+import { AuditLog } from './entities/audit-log.entity';
+import { AuditLogService } from './audit-log.service';
 
 @Module({
   imports: [
@@ -18,14 +24,18 @@ import { WorkspaceMembership } from './entities/workspace-membership.entity';
       User,
       WorkspaceInvite,
       WorkspaceMembership,
+      Branch,
+      BranchMembership,
+      AuditLog,
       Transaction,
       InventoryItem,
+      Customer,
     ]),
     BillingModule,
     NotificationsModule,
   ],
-  providers: [WorkspaceService],
+  providers: [WorkspaceService, BranchAccessService, AuditLogService],
   controllers: [WorkspaceController],
-  exports: [WorkspaceService],
+  exports: [WorkspaceService, BranchAccessService, AuditLogService],
 })
 export class WorkspaceModule {}

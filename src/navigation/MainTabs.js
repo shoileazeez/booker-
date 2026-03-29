@@ -16,6 +16,9 @@ import RecordExpenseScreen from '../screens/RecordExpenseScreen';
 import RecordDebtScreen from '../screens/RecordDebtScreen';
 import BranchCreateScreen from '../screens/branch/BranchCreateScreen';
 import BranchListScreen from '../screens/branch/BranchListScreen';
+import BranchDetailScreen from '../screens/branch/BranchDetailScreen';
+import AuditLogScreen from '../screens/admin/AuditLogScreen';
+import StockTransferScreen from '../screens/admin/StockTransferScreen';
 import WorkspaceSetupScreen from '../screens/workspace/WorkspaceSetupScreen';
 import WorkspaceInvitesScreen from '../screens/workspace/WorkspaceInvitesScreen';
 import SubscriptionScreen from '../screens/billing/SubscriptionScreen';
@@ -128,6 +131,9 @@ export default function MainTabs() {
       <Stack.Screen name="RecordDebt" component={RecordDebtScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="CreateBranch" component={BranchCreateScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="BranchList" component={BranchListScreen} options={{ presentation: 'modal' }} />
+      <Stack.Screen name="BranchDetail" component={BranchDetailScreen} options={{ presentation: 'modal' }} />
+      <Stack.Screen name="AuditLogs" component={AuditLogScreen} options={{ presentation: 'modal' }} />
+      <Stack.Screen name="StockTransfer" component={StockTransferScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="TeamManagement" component={TeamManagementScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="CreateWorkspace" component={WorkspaceSetupScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="JoinWorkspace" component={WorkspaceInvitesScreen} options={{ presentation: 'modal' }} />

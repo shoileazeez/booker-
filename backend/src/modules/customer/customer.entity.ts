@@ -7,6 +7,7 @@ import {
   ManyToOne,
 } from 'typeorm';
 import { Workspace } from '../workspace/entities/workspace.entity';
+import { Branch } from '../workspace/entities/branch.entity';
 
 @Entity('customers')
 export class Customer {
@@ -27,6 +28,15 @@ export class Customer {
 
   @ManyToOne(() => Workspace, { nullable: false })
   workspace: Workspace;
+
+  @Column({ name: 'workspace_id', type: 'uuid', nullable: true })
+  workspaceId: string | null;
+
+  @ManyToOne(() => Branch, (branch) => branch.customers, { nullable: true })
+  branch: Branch | null;
+
+  @Column({ name: 'branch_id', type: 'uuid', nullable: true })
+  branchId: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

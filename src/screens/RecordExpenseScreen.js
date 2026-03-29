@@ -29,7 +29,7 @@ const EXPENSE_CATEGORIES = [
 export default function RecordExpenseScreen({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const { currentWorkspaceId, queueAction } = useWorkspace();
+  const { currentWorkspaceId, activeBranchId, queueAction } = useWorkspace();
 
   const [category, setCategory] = useState('');
   const [amount, setAmount] = useState('');
@@ -44,7 +44,7 @@ export default function RecordExpenseScreen({ navigation }) {
       return;
     }
 
-    if (!currentWorkspaceId) {
+    if (!currentWorkspaceId || !activeBranchId) {
       Alert.alert(
         'Workspace required',
         'Please select a workspace before recording an expense',
@@ -78,14 +78,14 @@ export default function RecordExpenseScreen({ navigation }) {
       .slice(2)}`;
     try {
       const result = await api.post(
-        `/workspaces/${currentWorkspaceId}/transactions`,
+        `/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/transactions`,
         payload,
       );
       await upsertLocalTransaction(
         {
           local_id: localId,
           server_id: result?.id ? String(result.id) : null,
-          workspace_server_id: currentWorkspaceId,
+          workspace_server_id: activeBranchId,
           data: {
             ...payload,
             ...(result || {}),
@@ -116,7 +116,7 @@ export default function RecordExpenseScreen({ navigation }) {
       if (queueAction && !err?.response) {
         await queueAction({
           method: 'post',
-          path: `/workspaces/${currentWorkspaceId}/transactions`,
+          path: `/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/transactions`,
           body: payload,
         });
         Alert.alert('Offline', 'Expense queued and will sync once online.', [
@@ -439,3 +439,4 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 });
+

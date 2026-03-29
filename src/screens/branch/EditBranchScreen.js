@@ -8,7 +8,7 @@ import { useWorkspace } from '../../context/WorkspaceContext';
 export default function EditBranchScreen({ navigation, route }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const { queueAction, setWorkspaces } = useWorkspace();
+  const { queueAction, setWorkspaces, currentWorkspaceId } = useWorkspace();
   const branch = route?.params?.branch;
   const [name, setName] = useState(branch?.name || '');
   const [loading, setLoading] = useState(false);
@@ -21,7 +21,7 @@ export default function EditBranchScreen({ navigation, route }) {
 
     setLoading(true);
     try {
-      await api.put(`/workspaces/${branch.id}`, { name: name.trim() });
+      await api.put(`/workspaces/${currentWorkspaceId}/branches/${branch.id}`, { name: name.trim() });
       await offlineStore.executeSql(
         'UPDATE local_workspaces SET name = ?, updated_at_local = ? WHERE local_id = ? OR server_id = ?',
         [name.trim(), Date.now(), branch.local_id || branch.id, branch.id],
@@ -45,7 +45,7 @@ export default function EditBranchScreen({ navigation, route }) {
         )));
         await queueAction({
           method: 'put',
-          path: `/workspaces/${branch.id}`,
+          path: `/workspaces/${currentWorkspaceId}/branches/${branch.id}`,
           body: { name: name.trim() },
         });
         Alert.alert('Offline', 'Branch update saved locally and will sync when online.');

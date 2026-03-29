@@ -20,7 +20,7 @@ import * as offlineStore from '../storage/offlineStore';
 const AddItemScreen = function({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const { currentWorkspaceId, queueAction } = useWorkspace();
+  const { currentWorkspaceId, activeBranchId, queueAction } = useWorkspace();
 
   const [name, setName] = useState('');
   const [quantity, setQuantity] = useState('1');
@@ -39,7 +39,7 @@ const AddItemScreen = function({ navigation }) {
       return;
     }
 
-    if (!currentWorkspaceId) {
+    if (!currentWorkspaceId || !activeBranchId) {
       Platform.OS === 'web'
         ? window.alert('Please select a workspace first')
         : Alert.alert('Error', 'Please select a workspace first');
@@ -61,16 +61,16 @@ const AddItemScreen = function({ navigation }) {
     const localId = `local_item_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
     try {
-      const result = await api.post(`/workspaces/${currentWorkspaceId}/inventory`, payload);
+      const result = await api.post(`/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/inventory`, payload);
       // Upsert into local SQLite so InventoryScreen shows the new item immediately
       const serverId = result?.id ? String(result.id) : null;
       offlineStore.upsertLocalInventory({
         local_id: localId,
         server_id: serverId,
-        workspace_server_id: currentWorkspaceId,
+        workspace_server_id: activeBranchId,
         data: { ...payload, id: result?.id ?? localId },
         sync_status: 'synced',
-      }, currentWorkspaceId).catch(() => null);
+      }, activeBranchId).catch(() => null);
       if (serverId) {
         offlineStore.setIdMapping('inventory', localId, serverId).catch(() => null);
       }
@@ -93,18 +93,18 @@ const AddItemScreen = function({ navigation }) {
         const localItem = {
           local_id: localId,
           server_id: null,
-          workspace_server_id: currentWorkspaceId,
+          workspace_server_id: activeBranchId,
           data: payload,
           sync_status: 'pending_create',
         };
-        await offlineStore.upsertLocalInventory(localItem, currentWorkspaceId);
+        await offlineStore.upsertLocalInventory(localItem, activeBranchId);
         // Queue to the structured outbox for background sync
         await offlineStore.addSyncOutboxAction({
           action_id: localId,
           action_type: 'create_inventory',
           entity_type: 'inventory',
           entity_local_id: localId,
-          workspace_ref: currentWorkspaceId,
+          workspace_ref: activeBranchId,
           payload,
         });
         Platform.OS === 'web'

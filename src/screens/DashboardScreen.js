@@ -5,10 +5,11 @@ import { useTheme } from '../theme/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { cacheTransactions, getCachedTransactions } from '../storage/offlineStore';
 import { cacheInventory, getCachedInventory } from '../storage/offlineStore';
-import { Card, Title, Subtle, SkeletonBlock, EmptyState } from '../components/UI';
+import { Card, Title, Subtle, SkeletonBlock, EmptyState, AppButton } from '../components/UI';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../api/client';
 import { MaterialIcons } from '@expo/vector-icons';
+import UpgradeModal from '../components/UpgradeModal';
 
 export default function DashboardScreen({ navigation }) {
   const themeContext = useTheme();
@@ -43,7 +44,7 @@ export default function DashboardScreen({ navigation }) {
 
   React.useEffect(() => {
     const loadActivity = async () => {
-      if (!workspace.currentWorkspaceId) {
+      if (!workspace.activeBranchId) {
         setRecentSales([]);
         setRecentExpenses([]);
         return;
@@ -54,8 +55,8 @@ export default function DashboardScreen({ navigation }) {
 
       try {
         const [sales, expenses] = await Promise.all([
-          api.get(`/workspaces/${workspace.currentWorkspaceId}/transactions`, { type: 'sale', take: 3 }),
-          api.get(`/workspaces/${workspace.currentWorkspaceId}/transactions`, { type: 'expense', take: 3 }),
+          api.get(`/workspaces/${workspace.currentWorkspaceId}/branches/${workspace.activeBranchId}/transactions`, { type: 'sale', take: 3 }),
+          api.get(`/workspaces/${workspace.currentWorkspaceId}/branches/${workspace.activeBranchId}/transactions`, { type: 'expense', take: 3 }),
         ]);
 
         const salesList = Array.isArray(sales) ? sales : [];
@@ -64,11 +65,11 @@ export default function DashboardScreen({ navigation }) {
         setRecentSales(salesList);
         setRecentExpenses(expensesList);
 
-        cacheTransactions(workspace.currentWorkspaceId, 'sale', salesList).catch(() => null);
-        cacheTransactions(workspace.currentWorkspaceId, 'expense', expensesList).catch(() => null);
+        cacheTransactions(workspace.activeBranchId, 'sale', salesList).catch(() => null);
+        cacheTransactions(workspace.activeBranchId, 'expense', expensesList).catch(() => null);
       } catch (err) {
-        const cachedSales = await getCachedTransactions(workspace.currentWorkspaceId, 'sale');
-        const cachedExpenses = await getCachedTransactions(workspace.currentWorkspaceId, 'expense');
+        const cachedSales = await getCachedTransactions(workspace.activeBranchId, 'sale');
+        const cachedExpenses = await getCachedTransactions(workspace.activeBranchId, 'expense');
         setRecentSales(cachedSales);
         setRecentExpenses(cachedExpenses);
         setActivityError('Offline mode: showing last known activity');
@@ -78,28 +79,28 @@ export default function DashboardScreen({ navigation }) {
     };
 
     loadActivity();
-  }, [workspace.currentWorkspaceId, refreshTick]);
+  }, [workspace.activeBranchId, refreshTick]);
 
   React.useEffect(() => {
     const loadInventory = async () => {
-      if (!workspace.currentWorkspaceId) {
+      if (!workspace.activeBranchId) {
         setInventoryItems([]);
         return;
       }
 
       try {
-        const data = await api.get(`/workspaces/${workspace.currentWorkspaceId}/inventory`);
+        const data = await api.get(`/workspaces/${workspace.currentWorkspaceId}/branches/${workspace.activeBranchId}/inventory`);
         const list = Array.isArray(data) ? data : [];
         setInventoryItems(list);
-        cacheInventory(workspace.currentWorkspaceId, list).catch(() => null);
+        cacheInventory(workspace.activeBranchId, list).catch(() => null);
       } catch (err) {
-        const cached = await getCachedInventory(workspace.currentWorkspaceId);
+        const cached = await getCachedInventory(workspace.activeBranchId);
         setInventoryItems(Array.isArray(cached) ? cached : []);
       }
     };
 
     loadInventory();
-  }, [workspace.currentWorkspaceId, refreshTick]);
+  }, [workspace.activeBranchId, refreshTick]);
 
   React.useEffect(() => {
     const loadPendingInvites = async () => {
@@ -115,6 +116,9 @@ export default function DashboardScreen({ navigation }) {
   }, [refreshTick]);
 
   const currentWorkspace = workspace.workspaces.find((w) => w.id === workspace.currentWorkspaceId);
+  const currentBranch = workspace.branches?.find((b) => b.id === workspace.currentBranchId);
+  const currentWorkspaceRole = currentWorkspace?.role || user?.role || 'staff';
+  const isOwnerView = currentWorkspaceRole === 'owner';
   const currentHour = new Date().getHours();
   const greeting = currentHour < 12 ? 'Good morning' : currentHour < 17 ? 'Good afternoon' : 'Good evening';
   const inventoryValue = inventoryItems.reduce((sum, item) => {
@@ -166,7 +170,7 @@ export default function DashboardScreen({ navigation }) {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <View style={{ flex: 1, paddingRight: 10 }}>
               <Text style={{ color: theme.colors.textPrimary, fontSize: titleSize, fontWeight: '700' }}>{greeting}</Text>
-              <Subtle>{user ? user.name : 'Guest'}</Subtle>
+              <Subtle>{user ? user.name : 'Guest'}{currentBranch?.name ? ` • ${currentBranch.name}` : ''}</Subtle>
             </View>
             <TouchableOpacity
               style={[styles.workspaceBadge, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
@@ -253,6 +257,32 @@ export default function DashboardScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           </View>
+
+          {isOwnerView ? (
+            <Card style={{ marginTop: 16 }}>
+              <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', marginBottom: 6 }}>
+                Owner Tools
+              </Text>
+              <Subtle>
+                Workspace-wide controls for branch movement and audit visibility.
+              </Subtle>
+              <View style={{ flexDirection: compact ? 'column' : 'row', gap: 10, marginTop: 12 }}>
+                <AppButton
+                  title="Stock Transfers"
+                  icon="swap-horiz"
+                  onPress={() => navigation.navigate('StockTransfer')}
+                  style={{ flex: 1 }}
+                />
+                <AppButton
+                  title="Audit Logs"
+                  icon="history"
+                  variant="secondary"
+                  onPress={() => navigation.navigate('AuditLogs')}
+                  style={{ flex: 1 }}
+                />
+              </View>
+            </Card>
+          ) : null}
 
           {/* Recent Activity with Skeleton and Improved Empty State */}
           {activityError ? (
@@ -359,3 +389,5 @@ const styles = StyleSheet.create({
     elevation: 1,
   }
 });
+
+

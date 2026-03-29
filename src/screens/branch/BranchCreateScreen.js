@@ -145,10 +145,12 @@ export default function BranchCreateScreen({ navigation }) {
 
     setLoading(true);
     try {
-      await api.post('/workspaces', {
+      await api.post(`/workspaces/${currentWorkspaceId}/branches`, {
         name: branchName.trim(),
         description: [location.trim(), phone.trim(), address.trim()].filter(Boolean).join(' | '),
-        parentWorkspaceId: currentWorkspaceId,
+        location: location.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
         managerUserId: selectedManager?.id,
       });
 
@@ -167,65 +169,7 @@ export default function BranchCreateScreen({ navigation }) {
         return;
       }
       if (!err?.response) {
-        const localId = `local_branch_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-        const localBranch = {
-          id: localId,
-          local_id: localId,
-          server_id: null,
-          name: branchName.trim(),
-          description: [location.trim(), phone.trim(), address.trim()].filter(Boolean).join(' | '),
-          parentWorkspaceId: currentWorkspaceId,
-          managerUser: selectedManager
-            ? {
-                name: selectedManager.name,
-                email: selectedManager.email,
-              }
-            : null,
-          status: 'active',
-          role: 'manager',
-          sync_status: 'pending_create',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-
-        await offlineStore.executeSql(
-          `INSERT OR REPLACE INTO local_workspaces (local_id, server_id, name, description, parent_workspace_id, role, manager_user_name, manager_user_email, status, sync_status, last_error, updated_at_local)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            localId,
-            null,
-            localBranch.name,
-            localBranch.description,
-            currentWorkspaceId,
-            localBranch.role,
-            localBranch.managerUser?.name || null,
-            localBranch.managerUser?.email || null,
-            localBranch.status,
-            localBranch.sync_status,
-            null,
-            Date.now(),
-          ],
-        );
-        setWorkspaces((prev) => [localBranch, ...(prev || [])]);
-        await offlineStore.addSyncOutboxAction({
-          action_id: `create_workspace_${localId}`,
-          action_type: 'create_workspace',
-          entity_type: 'workspace',
-          entity_local_id: localId,
-          workspace_ref: localId,
-          payload: {
-            name: localBranch.name,
-            description: localBranch.description,
-            parentWorkspaceId: currentWorkspaceId,
-            managerUserId: selectedManager?.id || undefined,
-          },
-          created_at: Date.now(),
-          updated_at: Date.now(),
-        });
-
-        Alert.alert('Offline', 'Branch saved locally and will sync when you come back online.', [
-          { text: 'OK', onPress: () => navigation.goBack() },
-        ]);
+        Alert.alert('Offline', 'Branch creation requires a connection right now.');
         return;
       }
       Alert.alert('Error', getErrorMessage(err, 'Unable to create branch'));

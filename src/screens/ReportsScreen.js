@@ -41,7 +41,7 @@ const dedupeTransactions = (items = []) => {
 export default function ReportsScreen({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const { currentWorkspaceId, repo } = useWorkspace();
+  const { currentWorkspaceId, activeBranchId, repo } = useWorkspace();
   const { width } = useWindowDimensions();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -52,7 +52,7 @@ export default function ReportsScreen({ navigation }) {
       let mounted = true;
 
       const loadTransactions = async () => {
-        if (!currentWorkspaceId) {
+        if (!currentWorkspaceId || !activeBranchId) {
           if (mounted) setTransactions([]);
           return;
         }
@@ -96,17 +96,17 @@ export default function ReportsScreen({ navigation }) {
             setTransactions(mergedLocal);
           }
 
-          const list = await api.get(`/workspaces/${currentWorkspaceId}/transactions`, {
+          const list = await api.get(`/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/transactions`, {
             skip: 0,
             take: 500,
           });
           if (mounted) {
             setTransactions(Array.isArray(list) ? list : []);
           }
-          cacheTransactions(currentWorkspaceId, null, Array.isArray(list) ? list : []).catch(() => null);
+          cacheTransactions(activeBranchId, null, Array.isArray(list) ? list : []).catch(() => null);
         } catch (err) {
           if (mounted) {
-            const cached = await getCachedTransactions(currentWorkspaceId);
+            const cached = await getCachedTransactions(activeBranchId);
             setTransactions(Array.isArray(cached) ? cached : []);
           }
         } finally {
@@ -120,7 +120,7 @@ export default function ReportsScreen({ navigation }) {
       return () => {
         mounted = false;
       };
-    }, [currentWorkspaceId, repo]),
+    }, [currentWorkspaceId, activeBranchId, repo]),
   );
 
   const analytics = useMemo(() => {
@@ -486,3 +486,4 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
 });
+

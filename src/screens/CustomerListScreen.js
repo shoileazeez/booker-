@@ -12,7 +12,7 @@ import { useFocusEffect, useRoute } from '@react-navigation/native';
 
 export default function CustomerListScreen({ navigation }) {
   const { theme } = useTheme();
-  const { currentWorkspaceId, queueAction } = useWorkspace();
+  const { currentWorkspaceId, activeBranchId, queueAction } = useWorkspace();
   const [customers, setCustomers] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,15 +21,15 @@ export default function CustomerListScreen({ navigation }) {
   const selectMode = route.params?.selectMode;
 
   const loadCustomers = async () => {
-    if (!currentWorkspaceId) return;
+    if (!currentWorkspaceId || !activeBranchId) return;
     setLoading(true);
     try {
-      const data = await api.get(`/workspaces/${currentWorkspaceId}/customers`, search ? { search } : undefined);
+      const data = await api.get(`/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/customers`, search ? { search } : undefined);
       const list = Array.isArray(data) ? data : [];
       setCustomers(list);
-      cacheCustomers(currentWorkspaceId, list).catch(() => null);
+      cacheCustomers(activeBranchId, list).catch(() => null);
     } catch (err) {
-      const cached = await getCachedCustomers(currentWorkspaceId, search);
+      const cached = await getCachedCustomers(activeBranchId, search);
       setCustomers(Array.isArray(cached) ? cached : []);
     } finally {
       setLoading(false);
@@ -39,19 +39,19 @@ export default function CustomerListScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       loadCustomers();
-    }, [currentWorkspaceId, search]),
+    }, [currentWorkspaceId, activeBranchId, search]),
   );
 
   const handleDelete = async (id) => {
-    if (!currentWorkspaceId) return;
+    if (!currentWorkspaceId || !activeBranchId) return;
     try {
-      await api.delete(`/workspaces/${currentWorkspaceId}/customers/${id}`);
+      await api.delete(`/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/customers/${id}`);
       loadCustomers();
     } catch (err) {
       if (!err?.response && queueAction) {
         await queueAction({
           method: 'delete',
-          path: `/workspaces/${currentWorkspaceId}/customers/${id}`,
+          path: `/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/customers/${id}`,
         });
         loadCustomers();
       } else {
@@ -139,3 +139,4 @@ const styles = StyleSheet.create({
   input: { flex: 1, borderWidth: 1, borderRadius: 8, padding: 8, fontSize: 16 },
   row: { flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1 },
 });
+

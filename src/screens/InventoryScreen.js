@@ -23,7 +23,7 @@ import { EmptyState, SkeletonBlock } from '../components/UI';
 const HomeScreen = function({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const { currentWorkspaceId, queueAction, workspaces, repo } = useWorkspace();
+  const { currentWorkspaceId, activeBranchId, queueAction, workspaces, repo } = useWorkspace();
   const currentWorkspace = workspaces.find((workspace) => workspace.id === currentWorkspaceId);
 
   const [items, setItems] = useState([]);
@@ -36,7 +36,7 @@ const HomeScreen = function({ navigation }) {
 
   // Local-first list rendering with pending overlay
   const loadItems = useCallback(async () => {
-    if (!currentWorkspaceId) {
+    if (!currentWorkspaceId || !activeBranchId) {
       setItems([]);
       return;
     }
@@ -64,10 +64,10 @@ const HomeScreen = function({ navigation }) {
 
       // Optionally, fetch remote and update local cache if online
       try {
-        const data = await api.get(`/workspaces/${currentWorkspaceId}/inventory`);
+        const data = await api.get(`/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/inventory`);
         const list = Array.isArray(data) ? data : [];
         setItems(list);
-        cacheInventory(currentWorkspaceId, list);
+        cacheInventory(activeBranchId, list);
       } catch (err) {
         // Ignore fetch error, stay local
       }
@@ -76,7 +76,7 @@ const HomeScreen = function({ navigation }) {
     } finally {
       setLoadingItems(false);
     }
-  }, [currentWorkspaceId, repo]);
+  }, [currentWorkspaceId, activeBranchId, repo]);
 
   useFocusEffect(
     useCallback(() => {
@@ -137,7 +137,7 @@ const HomeScreen = function({ navigation }) {
           // Fallback: try to infer action from item
           action = {
             method: 'put',
-            path: `/workspaces/${currentWorkspaceId}/inventory/${item.id}`,
+            path: `/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/inventory/${item.id}`,
             body: { ...item },
           };
         }
@@ -162,11 +162,11 @@ const HomeScreen = function({ navigation }) {
   const handleUpdateQuantity = async function(itemId, qty) {
     if (qty < 0) return;
 
-    if (!currentWorkspaceId) return;
+    if (!currentWorkspaceId || !activeBranchId) return;
 
     try {
       await api.put(
-        `/workspaces/${currentWorkspaceId}/inventory/${itemId}`,
+        `/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/inventory/${itemId}`,
         { quantity: qty }
       );
 
@@ -177,7 +177,7 @@ const HomeScreen = function({ navigation }) {
           }
           return item;
         });
-        cacheInventory(currentWorkspaceId, next);
+        cacheInventory(activeBranchId, next);
         return next;
       });
 
@@ -200,7 +200,7 @@ const HomeScreen = function({ navigation }) {
       if (queueAction && isLikelyOfflineError(err)) {
         await queueAction({
           method: 'put',
-          path: `/workspaces/${currentWorkspaceId}/inventory/${itemId}`,
+          path: `/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/inventory/${itemId}`,
           body: { quantity: qty },
         });
         Alert.alert('Offline', 'Update queued and will sync once online');
@@ -213,7 +213,7 @@ const HomeScreen = function({ navigation }) {
   };
 
   const handleDeleteItem = async (itemId) => {
-    if (!currentWorkspaceId) return;
+    if (!currentWorkspaceId || !activeBranchId) return;
 
     Alert.alert('Delete item', 'Are you sure you want to delete this item?', [
       { text: 'Cancel', style: 'cancel' },
@@ -223,18 +223,18 @@ const HomeScreen = function({ navigation }) {
         onPress: async () => {
           try {
             await api.delete(
-              `/workspaces/${currentWorkspaceId}/inventory/${itemId}`
+              `/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/inventory/${itemId}`
             );
             setItems((prev) => {
               const next = prev.filter((item) => item.id !== itemId);
-              cacheInventory(currentWorkspaceId, next);
+              cacheInventory(activeBranchId, next);
               return next;
             });
           } catch (err) {
             if (queueAction && isLikelyOfflineError(err)) {
               await queueAction({
                 method: 'delete',
-                path: `/workspaces/${currentWorkspaceId}/inventory/${itemId}`,
+                path: `/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/inventory/${itemId}`,
               });
               Alert.alert('Offline', 'Delete queued and will sync once online');
             } else {
@@ -925,3 +925,4 @@ const styles = StyleSheet.create({
 });
 
 export default HomeScreen;
+

@@ -8,7 +8,9 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Workspace } from '../../workspace/entities/workspace.entity';
+import { Branch } from '../../workspace/entities/branch.entity';
 import { User } from '../../auth/entities/user.entity';
+import { StockTransfer } from './stock-transfer.entity';
 
 @Entity('inventory_items')
 export class InventoryItem {
@@ -53,6 +55,19 @@ export class InventoryItem {
   })
   @JoinColumn({ name: 'workspace_id' })
   workspace: Workspace;
+
+  @Column({ name: 'workspace_id', type: 'uuid', nullable: true })
+  workspaceId: string | null;
+
+  @ManyToOne(() => Branch, (branch) => branch.items, {
+    onDelete: 'CASCADE',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'branch_id' })
+  branch: Branch | null;
+
+  @Column({ name: 'branch_id', type: 'uuid', nullable: true })
+  branchId: string | null;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'created_by' })

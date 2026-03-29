@@ -62,7 +62,7 @@ export default function SalesScreen({ navigation }) {
   };
 
   const loadSales = useCallback(async () => {
-    if (!workspace.currentWorkspaceId) {
+    if (!workspace.activeBranchId) {
       setSales([]);
       return;
     }
@@ -90,7 +90,7 @@ export default function SalesScreen({ navigation }) {
 
       try {
         const data = await api.get(
-          `/workspaces/${workspace.currentWorkspaceId}/transactions`,
+          `/workspaces/${workspace.currentWorkspaceId}/branches/${workspace.activeBranchId}/transactions`,
           {
             type: 'sale',
             take: 50,
@@ -98,7 +98,7 @@ export default function SalesScreen({ navigation }) {
         );
         const list = Array.isArray(data) ? data : [];
         setSales(list);
-        cacheTransactions(workspace.currentWorkspaceId, 'sale', list).catch(
+        cacheTransactions(workspace.activeBranchId, 'sale', list).catch(
           () => null,
         );
       } catch {
@@ -109,7 +109,7 @@ export default function SalesScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [workspace.currentWorkspaceId, repo]);
+  }, [workspace.currentWorkspaceId, workspace.activeBranchId, repo]);
 
   const sendWhatsAppReceipt = (phone, name, receiptUrl) => {
     const normalizedPhone = normalizeWhatsAppNumber(phone);
@@ -217,7 +217,7 @@ export default function SalesScreen({ navigation }) {
             Sales
           </Text>
           <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
-            Sold goods history for this workspace
+            Sold goods history for this branch
           </Text>
         </View>
         <AppButton
@@ -395,3 +395,5 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 });
+
+

@@ -16,8 +16,8 @@ const buildLocalTotals = (branches = []) => ({
 export default function BranchListScreen({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const { currentWorkspaceId, workspaces } = useWorkspace();
-  const [branches, setBranches] = useState([]);
+  const { currentWorkspaceId, branches: availableBranches } = useWorkspace();
+  const [branchRows, setBranchRows] = useState([]);
   const [totals, setTotals] = useState(null);
   const [loading, setLoading] = useState(false);
   const [offlineNotice, setOfflineNotice] = useState('');
@@ -36,12 +36,10 @@ export default function BranchListScreen({ navigation }) {
     useCallback(() => {
       let active = true;
 
-      const localBranches = (workspaces || []).filter(
-        (item) => item.parentWorkspaceId === currentWorkspaceId,
-      );
+      const localBranches = availableBranches || [];
 
       if (!currentWorkspaceId) {
-        setBranches([]);
+        setBranchRows([]);
         setTotals(null);
         setOfflineNotice('');
         return () => {
@@ -50,7 +48,7 @@ export default function BranchListScreen({ navigation }) {
       }
 
       if (localBranches.length > 0) {
-        setBranches(localBranches);
+        setBranchRows(localBranches);
         setTotals(buildLocalTotals(localBranches));
       }
 
@@ -61,12 +59,12 @@ export default function BranchListScreen({ navigation }) {
             `/workspaces/${currentWorkspaceId}/management/overview`,
           );
           if (!active) return;
-          setBranches(Array.isArray(data?.branches) ? data.branches : []);
+          setBranchRows(Array.isArray(data?.branches) ? data.branches : []);
           setTotals(data?.totals || null);
           setOfflineNotice('');
         } catch (err) {
           if (!active) return;
-          setBranches(localBranches);
+          setBranchRows(localBranches);
           setTotals(buildLocalTotals(localBranches));
           setOfflineNotice(
             localBranches.length > 0
@@ -84,7 +82,7 @@ export default function BranchListScreen({ navigation }) {
       return () => {
         active = false;
       };
-    }, [currentWorkspaceId, workspaces]),
+    }, [availableBranches, currentWorkspaceId]),
   );
 
   return (
@@ -161,12 +159,16 @@ export default function BranchListScreen({ navigation }) {
         </View>
       ) : (
         <FlatList
-          data={branches}
+          data={branchRows}
           keyExtractor={(item, index) =>
             item?.id ? String(item.id) : `branch-${index}`
           }
           contentContainerStyle={{ padding: 12 }}
           renderItem={({ item }) => (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => navigation.push('BranchDetail', { branchId: item.id })}
+            >
             <Card>
               <View>
                 <Text
@@ -216,8 +218,17 @@ export default function BranchListScreen({ navigation }) {
                   debt: N
                   {Number(item.pendingDebtAmount || 0).toLocaleString()}
                 </Text>
+                <View style={styles.badgeRow}>
+                  <View style={[styles.badge, { backgroundColor: `${theme.colors.primary}16` }]}>
+                    <Text style={[styles.badgeText, { color: theme.colors.primary }]}>Branch scoped</Text>
+                  </View>
+                  <View style={[styles.badge, { backgroundColor: `${theme.colors.warning}16` }]}>
+                    <Text style={[styles.badgeText, { color: theme.colors.warning }]}>Permissions editable</Text>
+                  </View>
+                </View>
               </View>
             </Card>
+            </TouchableOpacity>
           )}
           ListEmptyComponent={() => (
             <EmptyState
@@ -254,5 +265,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 10,
+  },
+  badge: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginRight: 8,
+    marginBottom: 6,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

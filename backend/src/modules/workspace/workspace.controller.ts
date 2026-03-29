@@ -13,6 +13,9 @@ import {
 import { WorkspaceService } from './workspace.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CreateBranchDto } from './dto/create-branch.dto';
+import { UpdateBranchDto } from './dto/update-branch.dto';
+import { UpdateBranchMemberDto } from './dto/update-branch-member.dto';
 
 @Controller('workspaces')
 @UseGuards(JwtAuthGuard)
@@ -53,6 +56,101 @@ export class WorkspaceController {
   @Get(':id/branches')
   async getBranches(@Param('id') id: string, @Request() req) {
     return this.workspaceService.getBranches(id, req.user.sub);
+  }
+
+  @Post(':id/branches')
+  async createBranch(
+    @Param('id') id: string,
+    @Body() dto: CreateBranchDto,
+    @Request() req,
+  ) {
+    return this.workspaceService.createBranch(id, dto, req.user.sub);
+  }
+
+  @Get(':id/branches/:branchId')
+  async getBranch(
+    @Param('id') id: string,
+    @Param('branchId') branchId: string,
+    @Request() req,
+  ) {
+    return this.workspaceService.getBranch(id, branchId, req.user.sub);
+  }
+
+  @Put(':id/branches/:branchId')
+  async updateBranch(
+    @Param('id') id: string,
+    @Param('branchId') branchId: string,
+    @Body() dto: UpdateBranchDto,
+    @Request() req,
+  ) {
+    return this.workspaceService.updateBranch(id, branchId, dto, req.user.sub);
+  }
+
+  @Get(':id/branches/:branchId/details')
+  async getBranchDetails(
+    @Param('id') id: string,
+    @Param('branchId') branchId: string,
+    @Request() req,
+  ) {
+    return this.workspaceService.getBranchDetails(id, branchId, req.user.sub);
+  }
+
+  @Post(':id/branches/:branchId/users/:userId')
+  async assignUserToBranch(
+    @Param('id') id: string,
+    @Param('branchId') branchId: string,
+    @Param('userId') userId: string,
+    @Body() dto: UpdateBranchMemberDto,
+    @Request() req,
+  ) {
+    return this.workspaceService.assignUserToBranch(
+      id,
+      branchId,
+      userId,
+      req.user.sub,
+      dto,
+    );
+  }
+
+  @Put(':id/branches/:branchId/users/:userId')
+  async updateBranchMember(
+    @Param('id') id: string,
+    @Param('branchId') branchId: string,
+    @Param('userId') userId: string,
+    @Body() dto: UpdateBranchMemberDto,
+    @Request() req,
+  ) {
+    return this.workspaceService.updateBranchMember(
+      id,
+      branchId,
+      userId,
+      req.user.sub,
+      dto,
+    );
+  }
+
+  @Delete(':id/branches/:branchId/users/:userId')
+  async removeUserFromBranch(
+    @Param('id') id: string,
+    @Param('branchId') branchId: string,
+    @Param('userId') userId: string,
+    @Request() req,
+  ) {
+    return this.workspaceService.removeUserFromBranch(
+      id,
+      branchId,
+      userId,
+      req.user.sub,
+    );
+  }
+
+  @Get(':id/audit-logs')
+  async getAuditLogs(
+    @Param('id') id: string,
+    @Request() req,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.workspaceService.getAuditLogs(id, req.user.sub, { branchId });
   }
 
   @Get(':id/management/overview')

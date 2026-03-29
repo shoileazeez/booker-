@@ -16,6 +16,17 @@ import { EmailService } from '../notifications/email.service';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { InventoryItem } from '../inventory/entities/inventory-item.entity';
 import { WorkspaceMembership } from './entities/workspace-membership.entity';
+import { Branch } from './entities/branch.entity';
+import { BranchMembership } from './entities/branch-membership.entity';
+import { BranchAccessService } from './branch-access.service';
+import { Customer } from '../customer/customer.entity';
+import { CreateBranchDto } from './dto/create-branch.dto';
+import { UpdateBranchDto } from './dto/update-branch.dto';
+import {
+  UpdateBranchMemberDto,
+} from './dto/update-branch-member.dto';
+import { AuditLogService } from './audit-log.service';
+import { AuditLog } from './entities/audit-log.entity';
 
 @Injectable()
 export class WorkspaceService {
@@ -30,13 +41,23 @@ export class WorkspaceService {
     private invitesRepository: Repository<WorkspaceInvite>,
     @InjectRepository(WorkspaceMembership)
     private membershipsRepository: Repository<WorkspaceMembership>,
+    @InjectRepository(Branch)
+    private branchesRepository: Repository<Branch>,
+    @InjectRepository(BranchMembership)
+    private branchMembershipsRepository: Repository<BranchMembership>,
     @InjectRepository(Transaction)
     private transactionsRepository: Repository<Transaction>,
     @InjectRepository(InventoryItem)
     private inventoryRepository: Repository<InventoryItem>,
+    @InjectRepository(Customer)
+    private customersRepository: Repository<Customer>,
+    @InjectRepository(AuditLog)
+    private auditLogsRepository: Repository<AuditLog>,
     private billingService: BillingService,
     private readonly emailQueueService: EmailQueueService,
     private readonly emailService: EmailService,
+    private readonly branchAccessService: BranchAccessService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   private normalizeWorkspaceRole(role?: string): 'owner' | 'manager' | 'staff' {
@@ -202,52 +223,10 @@ export class WorkspaceService {
       });
     }
 
-    let managerUser: User | null = null;
-
     if (createWorkspaceDto.parentWorkspaceId) {
-      const parentWorkspace = await this.workspacesRepository.findOne({
-        where: { id: createWorkspaceDto.parentWorkspaceId },
-      });
-
-      if (!parentWorkspace) {
-        throw new NotFoundException('Parent workspace not found');
-      }
-
-      const parentMembership = await this.getMembership(
-        createWorkspaceDto.parentWorkspaceId,
-        userId,
+      throw new BadRequestException(
+        'Branches are no longer created as child workspaces. Use the branch endpoints instead.',
       );
-      const canManageParent =
-        this.getEffectiveWorkspaceRole(parentMembership) === 'owner' ||
-        ['admin', 'super_admin'].includes(user.role);
-
-      if (!canManageParent) {
-        throw new BadRequestException(
-          'You are not allowed to create a branch for this workspace',
-        );
-      }
-
-      if (createWorkspaceDto.managerUserId) {
-        const managerMembership = await this.membershipsRepository.findOne({
-          where: {
-            workspaceId: createWorkspaceDto.parentWorkspaceId,
-            userId: createWorkspaceDto.managerUserId,
-            isActive: true,
-          },
-          relations: ['user'],
-        });
-        if (!managerMembership?.user) {
-          throw new NotFoundException(
-            'Selected branch manager must already belong to this workspace team',
-          );
-        }
-        if (this.getEffectiveWorkspaceRole(managerMembership) !== 'manager') {
-          throw new BadRequestException(
-            'Selected branch manager must have manager access in the parent workspace',
-          );
-        }
-        managerUser = managerMembership.user;
-      }
     }
 
     const slug = createWorkspaceDto.name
@@ -266,17 +245,14 @@ export class WorkspaceService {
     const workspace = this.workspacesRepository.create({
       ...createWorkspaceDto,
       slug,
-      parentWorkspaceId: createWorkspaceDto.parentWorkspaceId || null,
-      managerUserId: managerUser?.id || null,
-      managerUser: managerUser || null,
+      parentWorkspaceId: null,
+      managerUserId: null,
+      managerUser: null,
       createdBy: user,
     });
 
     const saved = await this.workspacesRepository.save(workspace);
     await this.createOrUpdateMembership(saved.id, user.id, 'owner');
-    if (managerUser && managerUser.id !== user.id) {
-      await this.createOrUpdateMembership(saved.id, managerUser.id, 'manager');
-    }
 
     if (user.role === 'user') {
       user.role = 'owner';
@@ -306,7 +282,9 @@ export class WorkspaceService {
       order: { updatedAt: 'DESC' },
     });
 
-    return memberships.map((membership) => ({
+    return memberships
+      .filter((membership) => !membership.workspace.parentWorkspaceId)
+      .map((membership) => ({
       id: membership.workspace.id,
       name: membership.workspace.name,
       description: membership.workspace.description,
@@ -373,21 +351,84 @@ export class WorkspaceService {
     return await this.workspacesRepository.save(workspace);
   }
 
-  async getBranches(workspaceId: string, userId: string) {
-    await this.assertWorkspaceManagerAccess(workspaceId, userId);
+  async createBranch(
+    workspaceId: string,
+    dto: CreateBranchDto,
+    requesterId: string,
+  ) {
+    const { workspace } = await this.branchAccessService.assertWorkspaceOwnerLike(
+      workspaceId,
+      requesterId,
+    );
 
-    const branches = await this.workspacesRepository.find({
-      where: { parentWorkspaceId: workspaceId },
-      relations: ['createdBy', 'managerUser'],
-      order: { createdAt: 'DESC' },
+    let managerUser: User | null = null;
+    if (dto.managerUserId) {
+      const managerMembership = await this.membershipsRepository.findOne({
+        where: {
+          workspaceId,
+          userId: dto.managerUserId,
+          isActive: true,
+        },
+        relations: ['user'],
+      });
+
+      if (!managerMembership?.user) {
+        throw new NotFoundException(
+          'Selected branch manager must already belong to this workspace team',
+        );
+      }
+
+      managerUser = managerMembership.user;
+    }
+
+    const branch = this.branchesRepository.create({
+      name: dto.name,
+      description: dto.description || null,
+      location: dto.location || null,
+      address: dto.address || null,
+      phone: dto.phone || null,
+      workspaceId,
+      workspace,
+      managerUserId: managerUser?.id || null,
+      managerUser: managerUser || null,
+      createdBy: workspace.createdBy,
     });
 
+    const saved = await this.branchesRepository.save(branch);
+    if (managerUser) {
+      await this.branchAccessService.createOrUpdateBranchMembership(
+        saved.id,
+        managerUser.id,
+        'manager',
+      );
+    }
+    await this.auditLogService.log({
+      workspaceId,
+      branchId: saved.id,
+      actorUserId: requesterId,
+      action: 'branch.create',
+      entityType: 'branch',
+      entityId: saved.id,
+      metadata: {
+        name: saved.name,
+        managerUserId: saved.managerUserId,
+      },
+    });
+
+    return this.getBranch(workspaceId, saved.id, requesterId);
+  }
+
+  async getBranches(workspaceId: string, userId: string) {
+    const branches = await this.branchAccessService.getAccessibleBranches(
+      workspaceId,
+      userId,
+    );
     const branchIds = branches.map((branch) => branch.id);
     const branchMemberships =
       branchIds.length > 0
-        ? await this.membershipsRepository.find({
+        ? await this.branchMembershipsRepository.find({
             where: branchIds.map((branchId) => ({
-              workspaceId: branchId,
+              branchId,
               isActive: true,
             })),
             relations: ['user'],
@@ -395,9 +436,25 @@ export class WorkspaceService {
         : [];
 
     return branches.map((branch) => ({
-      ...branch,
+      id: branch.id,
+      name: branch.name,
+      description: branch.description,
+      location: branch.location,
+      address: branch.address,
+      phone: branch.phone,
+      status: branch.status,
+      workspaceId: branch.workspaceId,
+      createdAt: branch.createdAt,
+      updatedAt: branch.updatedAt,
+      managerUser: branch.managerUser
+        ? {
+            id: branch.managerUser.id,
+            name: branch.managerUser.name,
+            email: branch.managerUser.email,
+          }
+        : null,
       users: branchMemberships
-        .filter((membership) => membership.workspaceId === branch.id)
+        .filter((membership) => membership.branchId === branch.id)
         .map((membership) => ({
           id: membership.user.id,
           name: membership.user.name,
@@ -407,38 +464,335 @@ export class WorkspaceService {
     }));
   }
 
-  async getManagementOverview(workspaceId: string, requesterId: string) {
-    const { workspace } = await this.assertWorkspaceManagerAccess(
+  async getBranch(workspaceId: string, branchId: string, userId: string) {
+    const { branch } = await this.branchAccessService.assertBranchAccess(
+      workspaceId,
+      branchId,
+      userId,
+      { minimumRole: 'staff' },
+    );
+
+    const memberships = await this.branchMembershipsRepository.find({
+      where: { branchId, isActive: true },
+      relations: ['user'],
+      order: { createdAt: 'ASC' },
+    });
+
+    return {
+      id: branch.id,
+      name: branch.name,
+      description: branch.description,
+      location: branch.location,
+      address: branch.address,
+      phone: branch.phone,
+      status: branch.status,
+      workspaceId: branch.workspaceId,
+      managerUser: branch.managerUser
+        ? {
+            id: branch.managerUser.id,
+            name: branch.managerUser.name,
+            email: branch.managerUser.email,
+          }
+        : null,
+      users: memberships.map((membership) => ({
+        id: membership.user.id,
+        name: membership.user.name,
+        email: membership.user.email,
+        phone: membership.user.phone,
+        role: membership.role,
+        permissions:
+          membership.permissions ||
+          this.branchAccessService.getEffectivePermissions(membership),
+        isActive: membership.user.isActive && membership.isActive,
+      })),
+      createdAt: branch.createdAt,
+      updatedAt: branch.updatedAt,
+    };
+  }
+
+  async updateBranch(
+    workspaceId: string,
+    branchId: string,
+    dto: UpdateBranchDto,
+    requesterId: string,
+  ) {
+    await this.branchAccessService.assertWorkspaceOwnerLike(
       workspaceId,
       requesterId,
     );
 
-    const branchEntities = await this.workspacesRepository.find({
-      where: [{ id: workspaceId }, { parentWorkspaceId: workspaceId }],
-      relations: ['createdBy', 'managerUser'],
+    const branch = await this.branchesRepository.findOne({
+      where: { id: branchId, workspaceId },
+      relations: ['managerUser'],
+    });
+    if (!branch) {
+      throw new NotFoundException('Branch not found');
+    }
+
+    let managerUser: User | null | undefined = branch.managerUser;
+    if (dto.managerUserId !== undefined) {
+      if (!dto.managerUserId) {
+        managerUser = null;
+      } else {
+        const managerMembership = await this.membershipsRepository.findOne({
+          where: {
+            workspaceId,
+            userId: dto.managerUserId,
+            isActive: true,
+          },
+          relations: ['user'],
+        });
+        if (!managerMembership?.user) {
+          throw new NotFoundException(
+            'Selected branch manager must already belong to this workspace team',
+          );
+        }
+        managerUser = managerMembership.user;
+      }
+    }
+
+    Object.assign(branch, {
+      name: dto.name ?? branch.name,
+      description:
+        dto.description !== undefined ? dto.description || null : branch.description,
+      location: dto.location !== undefined ? dto.location || null : branch.location,
+      address: dto.address !== undefined ? dto.address || null : branch.address,
+      phone: dto.phone !== undefined ? dto.phone || null : branch.phone,
+      managerUserId: managerUser?.id || null,
+      managerUser: managerUser || null,
+    });
+
+    const saved = await this.branchesRepository.save(branch);
+    if (saved.managerUserId) {
+      await this.branchAccessService.createOrUpdateBranchMembership(
+        saved.id,
+        saved.managerUserId,
+        'manager',
+      );
+    }
+    await this.auditLogService.log({
+      workspaceId,
+      branchId: saved.id,
+      actorUserId: requesterId,
+      action: 'branch.update',
+      entityType: 'branch',
+      entityId: saved.id,
+      metadata: dto,
+    });
+    return this.getBranch(workspaceId, branchId, requesterId);
+  }
+
+  async assignUserToBranch(
+    workspaceId: string,
+    branchId: string,
+    userId: string,
+    requesterId: string,
+    dto: UpdateBranchMemberDto,
+  ) {
+    await this.branchAccessService.assertWorkspaceOwnerLike(
+      workspaceId,
+      requesterId,
+    );
+
+    const branch = await this.branchesRepository.findOne({
+      where: { id: branchId, workspaceId },
+    });
+    if (!branch) {
+      throw new NotFoundException('Branch not found');
+    }
+
+    const workspaceMembership = await this.membershipsRepository.findOne({
+      where: { workspaceId, userId, isActive: true },
+      relations: ['user'],
+    });
+    if (!workspaceMembership?.user) {
+      throw new BadRequestException(
+        'User must belong to the workspace before being assigned to a branch',
+      );
+    }
+
+    const role = dto.role === 'manager' ? 'manager' : 'staff';
+    await this.branchAccessService.createOrUpdateBranchMembership(
+      branchId,
+      userId,
+      role,
+      dto.permissions,
+    );
+    await this.auditLogService.log({
+      workspaceId,
+      branchId,
+      actorUserId: requesterId,
+      action: 'branch.member.assign',
+      entityType: 'branch_membership',
+      entityId: `${branchId}:${userId}`,
+      metadata: {
+        assignedUserId: userId,
+        role,
+        permissions: dto.permissions || [],
+      },
+    });
+
+    return this.getBranch(workspaceId, branchId, requesterId);
+  }
+
+  async updateBranchMember(
+    workspaceId: string,
+    branchId: string,
+    userId: string,
+    requesterId: string,
+    dto: UpdateBranchMemberDto,
+  ) {
+    await this.branchAccessService.assertWorkspaceOwnerLike(
+      workspaceId,
+      requesterId,
+    );
+
+    const membership = await this.branchMembershipsRepository.findOne({
+      where: { branchId, userId, isActive: true },
+    });
+    if (!membership) {
+      throw new NotFoundException('Branch membership not found');
+    }
+
+    membership.role = dto.role === 'manager' ? 'manager' : membership.role;
+    if (dto.role === 'staff') {
+      membership.role = 'staff';
+    }
+    membership.permissions = dto.permissions
+      ? this.branchAccessService.normalizePermissions(
+          membership.role,
+          dto.permissions,
+        )
+      : this.branchAccessService.normalizePermissions(
+          membership.role,
+          membership.permissions,
+        );
+    await this.branchMembershipsRepository.save(membership);
+
+    if (membership.role === 'manager') {
+      await this.branchesRepository.update(
+        { id: branchId, workspaceId },
+        { managerUserId: userId },
+      );
+    }
+
+    await this.auditLogService.log({
+      workspaceId,
+      branchId,
+      actorUserId: requesterId,
+      action: 'branch.member.update',
+      entityType: 'branch_membership',
+      entityId: `${branchId}:${userId}`,
+      metadata: {
+        role: membership.role,
+        permissions: membership.permissions,
+      },
+    });
+
+    return this.getBranch(workspaceId, branchId, requesterId);
+  }
+
+  async removeUserFromBranch(
+    workspaceId: string,
+    branchId: string,
+    userId: string,
+    requesterId: string,
+  ) {
+    await this.branchAccessService.assertWorkspaceOwnerLike(
+      workspaceId,
+      requesterId,
+    );
+
+    const membership = await this.branchMembershipsRepository.findOne({
+      where: { branchId, userId, isActive: true },
+    });
+    if (!membership) {
+      throw new NotFoundException('Branch membership not found');
+    }
+    membership.isActive = false;
+    await this.branchMembershipsRepository.save(membership);
+    await this.auditLogService.log({
+      workspaceId,
+      branchId,
+      actorUserId: requesterId,
+      action: 'branch.member.remove',
+      entityType: 'branch_membership',
+      entityId: `${branchId}:${userId}`,
+      metadata: { removedUserId: userId },
+    });
+    return { removed: true, branchId, userId };
+  }
+
+  async getAuditLogs(
+    workspaceId: string,
+    requesterId: string,
+    options?: { branchId?: string },
+  ) {
+    const branchId = options?.branchId?.trim();
+    if (branchId) {
+      await this.branchAccessService.assertBranchPermission(
+        workspaceId,
+        branchId,
+        requesterId,
+        'reports.view',
+      );
+    } else {
+      await this.branchAccessService.assertWorkspaceOwnerLike(
+        workspaceId,
+        requesterId,
+      );
+    }
+
+    const query = this.auditLogsRepository
+      .createQueryBuilder('log')
+      .where('log.workspace_id = :workspaceId', { workspaceId });
+
+    if (branchId) {
+      query.andWhere('log.branch_id = :branchId', { branchId });
+    }
+
+    return query.orderBy('log.created_at', 'DESC').take(200).getRawMany();
+  }
+
+  async getManagementOverview(workspaceId: string, requesterId: string) {
+    const { workspace } = await this.branchAccessService.assertWorkspaceOwnerLike(
+      workspaceId,
+      requesterId,
+    );
+
+    const branches = await this.branchesRepository.find({
+      where: { workspaceId },
+      relations: ['managerUser', 'createdBy'],
       order: { createdAt: 'DESC' },
     });
 
     const allMemberships = await this.membershipsRepository.find({
-      where: branchEntities.map((item) => ({
-        workspaceId: item.id,
-        isActive: true,
-      })),
+      where: [{ workspaceId, isActive: true }],
+      relations: ['user'],
+    });
+    const branchMemberships = await this.branchMembershipsRepository.find({
+      where:
+        branches.length > 0
+          ? branches.map((item) => ({
+              branchId: item.id,
+              isActive: true,
+            }))
+          : [{ branchId: '__none__', isActive: true }],
       relations: ['user'],
     });
 
-    const workspaceIds = branchEntities.map((item) => item.id);
     const inventoryCounts = await this.inventoryRepository
       .createQueryBuilder('item')
-      .select('item.workspace_id', 'workspaceId')
+      .select('item.branch_id', 'branchId')
       .addSelect('COUNT(*)', 'inventoryCount')
-      .where('item.workspace_id IN (:...workspaceIds)', { workspaceIds })
-      .groupBy('item.workspace_id')
+      .where('item.workspace_id = :workspaceId', { workspaceId })
+      .andWhere('item.branch_id IS NOT NULL')
+      .groupBy('item.branch_id')
       .getRawMany();
 
     const transactionStats = await this.transactionsRepository
       .createQueryBuilder('transaction')
-      .select('transaction.workspace_id', 'workspaceId')
+      .select('transaction.branch_id', 'branchId')
       .addSelect(
         "SUM(CASE WHEN transaction.type = 'sale' THEN transaction.totalAmount ELSE 0 END)",
         'salesAmount',
@@ -451,19 +805,20 @@ export class WorkspaceService {
         "SUM(CASE WHEN transaction.type = 'debt' AND transaction.status = 'pending' THEN transaction.totalAmount ELSE 0 END)",
         'pendingDebtAmount',
       )
-      .where('transaction.workspace_id IN (:...workspaceIds)', { workspaceIds })
-      .groupBy('transaction.workspace_id')
+      .where('transaction.workspace_id = :workspaceId', { workspaceId })
+      .andWhere('transaction.branch_id IS NOT NULL')
+      .groupBy('transaction.branch_id')
       .getRawMany();
 
     const staffPerformance = await this.transactionsRepository
       .createQueryBuilder('transaction')
       .leftJoin('transaction.createdBy', 'createdBy')
-      .leftJoin('transaction.workspace', 'workspace')
+      .leftJoin('transaction.branch', 'branch')
       .select('createdBy.id', 'userId')
       .addSelect('createdBy.name', 'name')
       .addSelect('createdBy.email', 'email')
-      .addSelect('workspace.id', 'workspaceId')
-      .addSelect('workspace.name', 'workspaceName')
+      .addSelect('branch.id', 'branchId')
+      .addSelect('branch.name', 'branchName')
       .addSelect(
         "SUM(CASE WHEN transaction.type = 'sale' THEN transaction.totalAmount ELSE 0 END)",
         'salesAmount',
@@ -472,12 +827,13 @@ export class WorkspaceService {
         "SUM(CASE WHEN transaction.type = 'sale' THEN 1 ELSE 0 END)",
         'salesCount',
       )
-      .where('transaction.workspace_id IN (:...workspaceIds)', { workspaceIds })
+      .where('transaction.workspace_id = :workspaceId', { workspaceId })
+      .andWhere('transaction.branch_id IS NOT NULL')
       .groupBy('createdBy.id')
       .addGroupBy('createdBy.name')
       .addGroupBy('createdBy.email')
-      .addGroupBy('workspace.id')
-      .addGroupBy('workspace.name')
+      .addGroupBy('branch.id')
+      .addGroupBy('branch.name')
       .orderBy(
         "SUM(CASE WHEN transaction.type = 'sale' THEN transaction.totalAmount ELSE 0 END)",
         'DESC',
@@ -491,13 +847,13 @@ export class WorkspaceService {
 
     const inventoryMap = new Map(
       inventoryCounts.map((row) => [
-        row.workspaceId,
+        row.branchId,
         Number(row.inventoryCount || 0),
       ]),
     );
     const transactionMap = new Map(
       transactionStats.map((row) => [
-        row.workspaceId,
+        row.branchId,
         {
           salesAmount: Number(row.salesAmount || 0),
           salesCount: Number(row.salesCount || 0),
@@ -506,13 +862,10 @@ export class WorkspaceService {
       ]),
     );
 
-    const rootWorkspace =
-      branchEntities.find((item) => item.id === workspaceId) || workspace;
-    const branchSummaries = branchEntities
-      .filter((item) => item.id !== workspaceId)
-      .map((branch) => ({
+    const branchSummaries = branches.map((branch) => ({
         id: branch.id,
         name: branch.name,
+        location: branch.location,
         status: branch.status,
         createdAt: branch.createdAt,
         managerUser: branch.managerUser
@@ -522,8 +875,8 @@ export class WorkspaceService {
               email: branch.managerUser.email,
             }
           : null,
-        staffCount: allMemberships.filter(
-          (membership) => membership.workspaceId === branch.id,
+        staffCount: branchMemberships.filter(
+          (membership) => membership.branchId === branch.id,
         ).length,
         inventoryCount: inventoryMap.get(branch.id) || 0,
         salesAmount: transactionMap.get(branch.id)?.salesAmount || 0,
@@ -533,7 +886,7 @@ export class WorkspaceService {
       }));
 
     const workspaceMemberships = allMemberships.filter(
-      (membership) => membership.workspaceId === rootWorkspace.id,
+      (membership) => membership.workspaceId === workspace.id,
     );
     const memberIds = new Set(
       workspaceMemberships.map((membership) => membership.userId),
@@ -562,20 +915,17 @@ export class WorkspaceService {
       };
     });
 
-    const totals = branchEntities.reduce(
+    const totals = branchSummaries.reduce(
       (acc, item) => {
-        acc.staffCount += allMemberships.filter(
-          (membership) => membership.workspaceId === item.id,
-        ).length;
-        acc.inventoryCount += inventoryMap.get(item.id) || 0;
-        acc.salesAmount += transactionMap.get(item.id)?.salesAmount || 0;
-        acc.salesCount += transactionMap.get(item.id)?.salesCount || 0;
-        acc.pendingDebtAmount +=
-          transactionMap.get(item.id)?.pendingDebtAmount || 0;
+        acc.staffCount += Number(item.staffCount || 0);
+        acc.inventoryCount += Number(item.inventoryCount || 0);
+        acc.salesAmount += Number(item.salesAmount || 0);
+        acc.salesCount += Number(item.salesCount || 0);
+        acc.pendingDebtAmount += Number(item.pendingDebtAmount || 0);
         return acc;
       },
       {
-        branchCount: Math.max(0, branchEntities.length - 1),
+        branchCount: branchSummaries.length,
         staffCount: 0,
         inventoryCount: 0,
         salesAmount: 0,
@@ -586,14 +936,14 @@ export class WorkspaceService {
 
     return {
       workspace: {
-        id: rootWorkspace.id,
-        name: rootWorkspace.name,
-        status: rootWorkspace.status,
-        managerUser: rootWorkspace.managerUser
+        id: workspace.id,
+        name: workspace.name,
+        status: workspace.status,
+        managerUser: workspace.managerUser
           ? {
-              id: rootWorkspace.managerUser.id,
-              name: rootWorkspace.managerUser.name,
-              email: rootWorkspace.managerUser.email,
+              id: workspace.managerUser.id,
+              name: workspace.managerUser.name,
+              email: workspace.managerUser.email,
             }
           : null,
       },
@@ -614,11 +964,48 @@ export class WorkspaceService {
           userId: row.userId,
           name: row.name,
           email: row.email,
-          workspaceId: row.workspaceId,
-          workspaceName: row.workspaceName,
+          branchId: row.branchId,
+          branchName: row.branchName,
           salesAmount: Number(row.salesAmount || 0),
           salesCount: Number(row.salesCount || 0),
         })),
+    };
+  }
+
+  async getBranchDetails(workspaceId: string, branchId: string, requesterId: string) {
+    await this.branchAccessService.assertWorkspaceOwnerLike(workspaceId, requesterId);
+
+    const branch = await this.getBranch(workspaceId, branchId, requesterId);
+    const inventoryCount = await this.inventoryRepository.count({
+      where: { workspaceId, branchId },
+    });
+    const customerCount = await this.customersRepository.count({
+      where: { workspaceId, branchId },
+    });
+    const transactions = await this.transactionsRepository.find({
+      where: { workspaceId, branchId },
+      order: { createdAt: 'DESC' },
+      take: 20,
+    });
+
+    const sales = transactions.filter((item) => item.type === 'sale');
+    const debts = transactions.filter((item) => item.type === 'debt');
+
+    return {
+      branch,
+      metrics: {
+        inventoryCount,
+        customerCount,
+        salesCount: sales.length,
+        salesAmount: sales.reduce(
+          (sum, item) => sum + Number(item.totalAmount || 0),
+          0,
+        ),
+        pendingDebtAmount: debts
+          .filter((item) => item.status === 'pending')
+          .reduce((sum, item) => sum + Number(item.totalAmount || 0), 0),
+      },
+      recentTransactions: transactions,
     };
   }
 

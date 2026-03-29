@@ -39,7 +39,7 @@ const formatMoney = (value) => `NGN ${Number(value || 0).toLocaleString()}`;
 export default function RecordSaleScreen({ navigation, route }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const { currentWorkspaceId, queueAction } = useWorkspace();
+  const { currentWorkspaceId, activeBranchId, queueAction } = useWorkspace();
   const { selectedCustomer, setSelectedCustomer } = useCustomerSelect();
 
   const cartItems = route?.params?.cart ?? [];
@@ -63,17 +63,17 @@ export default function RecordSaleScreen({ navigation, route }) {
   const customerId = selectedCustomer ? selectedCustomer.id : '';
 
   const loadCustomers = useCallback(async () => {
-    if (!currentWorkspaceId) {
+    if (!currentWorkspaceId || !activeBranchId) {
       setCustomers([]);
       return;
     }
     try {
-      const data = await api.get(`/workspaces/${currentWorkspaceId}/customers`);
+      const data = await api.get(`/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/customers`);
       const list = Array.isArray(data) ? data : [];
       setCustomers(list);
-      cacheCustomers(currentWorkspaceId, list).catch(() => null);
+      cacheCustomers(activeBranchId, list).catch(() => null);
     } catch {
-      const cached = await getCachedCustomers(currentWorkspaceId);
+      const cached = await getCachedCustomers(activeBranchId);
       setCustomers(Array.isArray(cached) ? cached : []);
     }
   }, [currentWorkspaceId]);
@@ -86,18 +86,18 @@ export default function RecordSaleScreen({ navigation, route }) {
 
   React.useEffect(() => {
     const loadInventory = async () => {
-      if (!currentWorkspaceId) {
+      if (!currentWorkspaceId || !activeBranchId) {
         setInventoryItems([]);
         return;
       }
       setInventoryLoading(true);
       try {
-        const data = await api.get(`/workspaces/${currentWorkspaceId}/inventory`);
+        const data = await api.get(`/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/inventory`);
         const list = Array.isArray(data) ? data : [];
         setInventoryItems(list);
-        cacheInventory(currentWorkspaceId, list).catch(() => null);
+        cacheInventory(activeBranchId, list).catch(() => null);
       } catch {
-        const cached = await getCachedInventory(currentWorkspaceId);
+        const cached = await getCachedInventory(activeBranchId);
         setInventoryItems(Array.isArray(cached) ? cached : []);
       } finally {
         setInventoryLoading(false);
@@ -159,7 +159,7 @@ export default function RecordSaleScreen({ navigation, route }) {
         }),
       );
 
-      const cached = await getCachedInventory(currentWorkspaceId);
+      const cached = await getCachedInventory(activeBranchId);
       const matched = cached.find((item) => String(item.id) === String(itemId));
       if (!matched) return;
 
@@ -174,14 +174,14 @@ export default function RecordSaleScreen({ navigation, route }) {
         matched.local_id ||
         (String(itemId).startsWith('local_')
           ? String(itemId)
-          : await getLocalIdByServerId('inventory', itemId, currentWorkspaceId)) ||
+          : await getLocalIdByServerId('inventory', itemId, activeBranchId)) ||
         String(itemId);
 
       await upsertLocalInventory(
         {
           local_id: localId,
           server_id: String(itemId).startsWith('local_') ? null : String(itemId),
-          workspace_server_id: currentWorkspaceId,
+          workspace_server_id: activeBranchId,
           data: updatedItem,
           sync_status: matched.sync_status || 'synced',
           updated_at_local: Date.now(),
@@ -225,21 +225,21 @@ export default function RecordSaleScreen({ navigation, route }) {
     const queueOffline = async () => {
       await queueAction({
         method: 'post',
-        path: `/workspaces/${currentWorkspaceId}/transactions`,
+        path: `/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/transactions`,
         body: preparedPayload,
       });
     };
 
     try {
       const result = await api.post(
-        `/workspaces/${currentWorkspaceId}/transactions`,
+        `/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/transactions`,
         preparedPayload,
       );
       await upsertLocalTransaction(
         {
           local_id: localId,
           server_id: result?.id ? String(result.id) : null,
-          workspace_server_id: currentWorkspaceId,
+          workspace_server_id: activeBranchId,
           data: {
             ...localData,
             ...(result || {}),
@@ -286,7 +286,7 @@ export default function RecordSaleScreen({ navigation, route }) {
   };
 
   const handleSubmit = async () => {
-    if (!currentWorkspaceId) {
+    if (!currentWorkspaceId || !activeBranchId) {
       Alert.alert(
         'Workspace required',
         'Please select a workspace before recording a sale',
@@ -823,3 +823,4 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+

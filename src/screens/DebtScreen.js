@@ -58,7 +58,7 @@ const dedupeDebts = (items = []) => {
 export default function DebtScreen({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const { currentWorkspaceId, repo } = useWorkspace();
+  const { currentWorkspaceId, activeBranchId, repo } = useWorkspace();
   const { width } = useWindowDimensions();
 
   const [debts, setDebts] = useState([]);
@@ -78,7 +78,7 @@ export default function DebtScreen({ navigation }) {
 
   useEffect(() => {
     const loadDebts = async () => {
-      if (!currentWorkspaceId) {
+      if (!currentWorkspaceId || !activeBranchId) {
         setDebts([]);
         return;
       }
@@ -128,12 +128,12 @@ export default function DebtScreen({ navigation }) {
 
         try {
           const data = await api.get(
-            `/workspaces/${currentWorkspaceId}/transactions`,
+            `/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/transactions`,
             { type: 'debt' },
           );
           const list = Array.isArray(data) ? data : [];
           setDebts(dedupeDebts(list));
-          cacheDebts(currentWorkspaceId, list).catch(() => null);
+          cacheDebts(activeBranchId, list).catch(() => null);
         } catch {
           // Stay on local debt snapshot when offline.
         }
@@ -207,7 +207,7 @@ export default function DebtScreen({ navigation }) {
     );
     try {
       await api.put(
-        `/workspaces/${currentWorkspaceId}/transactions/${transactionId}/status`,
+        `/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/transactions/${transactionId}/status`,
         {
           status: 'completed',
         },
@@ -226,7 +226,7 @@ export default function DebtScreen({ navigation }) {
               server_id: String(existingDebt.id).startsWith('local_')
                 ? null
                 : String(existingDebt.id),
-              workspace_server_id: currentWorkspaceId,
+              workspace_server_id: activeBranchId,
               data: localData,
               sync_status:
                 existingDebt.sync_status === 'pending_create'
@@ -241,7 +241,7 @@ export default function DebtScreen({ navigation }) {
               server_id: String(existingDebt.id).startsWith('local_')
                 ? null
                 : String(existingDebt.id),
-              workspace_server_id: currentWorkspaceId,
+              workspace_server_id: activeBranchId,
               data: localData,
               sync_status:
                 existingDebt.sync_status === 'pending_create'
@@ -514,3 +514,4 @@ const styles = StyleSheet.create({
     minWidth: 108,
   },
 });
+
