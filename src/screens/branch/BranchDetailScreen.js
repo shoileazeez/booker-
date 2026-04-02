@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -40,9 +41,11 @@ export default function BranchDetailScreen({ navigation, route }) {
   const [memberModalVisible, setMemberModalVisible] = useState(false);
   const [savingMember, setSavingMember] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState('staff');
   const [selectedPermissions, setSelectedPermissions] = useState([]);
   const [editingMember, setEditingMember] = useState(null);
+  const [memberMode, setMemberMode] = useState('existing');
 
   const loadData = useCallback(async (isRefresh = false) => {
     if (!currentWorkspaceId || !branchId) {
@@ -97,8 +100,10 @@ export default function BranchDetailScreen({ navigation, route }) {
   const resetMemberModal = () => {
     setEditingMember(null);
     setSelectedUserId('');
+    setInviteEmail('');
     setSelectedRole('staff');
     setSelectedPermissions([]);
+    setMemberMode('existing');
   };
 
   const openAssignModal = () => {
@@ -124,7 +129,12 @@ export default function BranchDetailScreen({ navigation, route }) {
 
   const handleSaveMember = async () => {
     const userId = editingMember?.id || selectedUserId;
-    if (!userId) {
+    const normalizedInviteEmail = inviteEmail.trim().toLowerCase();
+    if (!editingMember && memberMode === 'invite' && !normalizedInviteEmail) {
+      Alert.alert('Branch member', 'Enter an email address first.');
+      return;
+    }
+    if (!editingMember && memberMode !== 'invite' && !userId) {
       Alert.alert('Branch member', 'Select a workspace user first.');
       return;
     }
@@ -140,6 +150,14 @@ export default function BranchDetailScreen({ navigation, route }) {
           `/workspaces/${currentWorkspaceId}/branches/${branchId}/users/${userId}`,
           payload,
         );
+      } else if (memberMode === 'invite') {
+        await api.post(`/workspaces/${currentWorkspaceId}/team/invite`, {
+          email: normalizedInviteEmail,
+          role: selectedRole,
+          branchId,
+          branchRole: selectedRole,
+          permissions: selectedPermissions,
+        });
       } else {
         await api.post(
           `/workspaces/${currentWorkspaceId}/branches/${branchId}/users/${userId}`,
@@ -373,22 +391,78 @@ export default function BranchDetailScreen({ navigation, route }) {
             </View>
 
             {!editingMember ? (
-              <View style={[styles.pickerWrap, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
-                <Picker
-                  selectedValue={selectedUserId}
-                  onValueChange={setSelectedUserId}
-                  style={{ color: theme.colors.textPrimary }}
-                >
-                  <Picker.Item label="Select workspace member" value="" />
-                  {assignableMembers.map((member) => (
-                    <Picker.Item
-                      key={member.id}
-                      label={`${member.name} (${member.email})`}
-                      value={member.id}
-                    />
-                  ))}
-                </Picker>
-              </View>
+              <>
+                <View style={styles.modeRow}>
+                  <TouchableOpacity
+                    onPress={() => setMemberMode('existing')}
+                    style={[
+                      styles.modeButton,
+                      {
+                        borderColor: memberMode === 'existing' ? theme.colors.primary : theme.colors.border,
+                        backgroundColor: memberMode === 'existing' ? `${theme.colors.primary}10` : theme.colors.background,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: memberMode === 'existing' ? theme.colors.primary : theme.colors.textPrimary, fontWeight: '700' }}>
+                      Existing member
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setMemberMode('invite')}
+                    style={[
+                      styles.modeButton,
+                      {
+                        borderColor: memberMode === 'invite' ? theme.colors.primary : theme.colors.border,
+                        backgroundColor: memberMode === 'invite' ? `${theme.colors.primary}10` : theme.colors.background,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: memberMode === 'invite' ? theme.colors.primary : theme.colors.textPrimary, fontWeight: '700' }}>
+                      Invite by email
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {memberMode === 'invite' ? (
+                  <TextInput
+                    style={[
+                      styles.emailInput,
+                      {
+                        color: theme.colors.textPrimary,
+                        borderColor: theme.colors.border,
+                        backgroundColor: theme.colors.background,
+                      },
+                    ]}
+                    placeholder="Email address"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    value={inviteEmail}
+                    onChangeText={setInviteEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                  />
+                ) : (
+                  <View style={[styles.pickerWrap, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+                    <Picker
+                      selectedValue={selectedUserId}
+                      onValueChange={setSelectedUserId}
+                      style={{ color: theme.colors.textPrimary }}
+                    >
+                      <Picker.Item label="Select workspace member" value="" />
+                      {assignableMembers.map((member) => (
+                        <Picker.Item
+                          key={member.id}
+                          label={`${member.name} (${member.email})`}
+                          value={member.id}
+                        />
+                      ))}
+                    </Picker>
+                  </View>
+                )}
+
+                {memberMode === 'invite' ? (
+                  <Subtle>This can invite a new person or add an existing workspace member directly to this branch.</Subtle>
+                ) : null}
+              </>
             ) : null}
 
             <View style={[styles.pickerWrap, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
@@ -513,6 +587,25 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
+  },
+  modeRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  modeButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emailInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
   },
   pickerWrap: {
     borderWidth: 1,

@@ -26,6 +26,7 @@ export default function TeamManagementScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('staff');
+  const [selectedInviteBranchId, setSelectedInviteBranchId] = useState('');
   const [submittingInvite, setSubmittingInvite] = useState(false);
 
   const currentWorkspace = useMemo(
@@ -80,24 +81,27 @@ export default function TeamManagementScreen({ navigation }) {
 
     setSubmittingInvite(true);
     try {
-      try {
-        const foundUser = await api.get(`/workspaces/${currentWorkspaceId}/users/search`, { email });
-        if (foundUser?.alreadyMember) {
-          Alert.alert('Already added', `${email} already belongs to this workspace.`);
-          return;
-        }
-      } catch (err) {
-        // Best-effort lookup only.
-      }
-
       const inviteResult = await api.post(`/workspaces/${currentWorkspaceId}/team/invite`, {
         email,
         role: inviteRole,
+        branchId: selectedInviteBranchId || undefined,
+        branchRole: inviteRole,
       });
 
       setInviteEmail('');
       setInviteRole('staff');
+      setSelectedInviteBranchId('');
       await loadOverview(true);
+
+      if (inviteResult?.alreadyMember) {
+        Alert.alert(
+          inviteResult?.assignedToBranch ? 'Member assigned' : 'Member updated',
+          inviteResult?.assignedToBranch
+            ? `${email} was added to the selected branch immediately.`
+            : `${email} already belonged to this workspace, so access was updated immediately.`,
+        );
+        return;
+      }
 
       if (inviteResult?.delivery === 'manual_code_required' && inviteResult?.inviteCode) {
         Alert.alert(
@@ -221,6 +225,22 @@ export default function TeamManagementScreen({ navigation }) {
             {currentWorkspaceRole === 'owner' ? <Picker.Item label="Manager" value="manager" /> : null}
           </Picker>
         </View>
+        <View style={[styles.pickerWrap, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}>
+          <Picker
+            selectedValue={selectedInviteBranchId}
+            onValueChange={setSelectedInviteBranchId}
+            style={{ color: theme.colors.textPrimary }}
+          >
+            <Picker.Item label="No branch assignment yet" value="" />
+            {(overview?.branches || []).map((branch) => (
+              <Picker.Item
+                key={branch.id}
+                label={`${branch.name}${branch.location ? ` (${branch.location})` : ''}`}
+                value={branch.id}
+              />
+            ))}
+          </Picker>
+        </View>
         <AppButton
           title={submittingInvite ? 'Sending...' : 'Send Invite'}
           icon="send"
@@ -229,8 +249,8 @@ export default function TeamManagementScreen({ navigation }) {
         />
         <Subtle>
           {currentWorkspaceRole === 'owner'
-            ? 'Owners can invite staff and managers.'
-            : 'Managers can invite staff only.'}
+            ? 'Owners can invite staff and managers, and optionally pre-assign a branch.'
+            : 'Managers can invite staff only, and optionally pre-assign a branch.'}
         </Subtle>
       </Card>
 
@@ -279,7 +299,10 @@ export default function TeamManagementScreen({ navigation }) {
           <View key={invite.id} style={[styles.simpleRow, { borderColor: theme.colors.border }]}>
             <View style={{ flex: 1 }}>
               <Text style={{ color: theme.colors.textPrimary, fontWeight: '600' }}>{invite.email}</Text>
-              <Subtle>{invite.role} • {new Date(invite.createdAt).toLocaleDateString()}</Subtle>
+              <Subtle>{invite.role} | {new Date(invite.createdAt).toLocaleDateString()}</Subtle>
+              {invite.branchName ? (
+                <Subtle>Branch: {invite.branchName} ({invite.branchRole || 'staff'})</Subtle>
+              ) : null}
             </View>
             <Text style={{ color: theme.colors.warning || theme.colors.textSecondary, fontWeight: '700' }}>
               {invite.status}

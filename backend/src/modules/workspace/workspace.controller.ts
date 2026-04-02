@@ -15,7 +15,10 @@ import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
-import { UpdateBranchMemberDto } from './dto/update-branch-member.dto';
+import {
+  UpdateBranchMemberDto,
+  BranchPermissionKey,
+} from './dto/update-branch-member.dto';
 
 @Controller('workspaces')
 @UseGuards(JwtAuthGuard)
@@ -232,7 +235,14 @@ export class WorkspaceController {
   @Post(':id/invite')
   async inviteUser(
     @Param('id') id: string,
-    @Body() inviteDto: { email: string; role?: string },
+    @Body()
+    inviteDto: {
+      email: string;
+      role?: string;
+      branchId?: string;
+      branchRole?: 'manager' | 'staff';
+      permissions?: BranchPermissionKey[];
+    },
     @Request() req,
   ) {
     return this.workspaceService.inviteUser(id, req.user.sub, inviteDto);
@@ -241,7 +251,14 @@ export class WorkspaceController {
   @Post(':id/team/invite')
   async inviteUserFromTeamRoute(
     @Param('id') id: string,
-    @Body() inviteDto: { email: string; role?: string },
+    @Body()
+    inviteDto: {
+      email: string;
+      role?: string;
+      branchId?: string;
+      branchRole?: 'manager' | 'staff';
+      permissions?: BranchPermissionKey[];
+    },
     @Request() req,
   ) {
     return this.workspaceService.inviteUser(id, req.user.sub, inviteDto);

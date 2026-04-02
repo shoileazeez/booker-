@@ -24,6 +24,7 @@ import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
 import {
   UpdateBranchMemberDto,
+  BranchPermissionKey,
 } from './dto/update-branch-member.dto';
 import { AuditLogService } from './audit-log.service';
 import { AuditLog } from './entities/audit-log.entity';
@@ -81,12 +82,72 @@ export class WorkspaceService {
     return `${Math.floor(100000 + Math.random() * 900000)}`;
   }
 
+  private normalizeBranchRole(role?: string): 'manager' | 'staff' {
+    return role === 'manager' ? 'manager' : 'staff';
+  }
+
   private getInviteExpiryDate() {
     return new Date(Date.now() + this.inviteExpiryDays * 24 * 60 * 60 * 1000);
   }
 
   private isInviteExpired(invite?: WorkspaceInvite | null) {
     return !!invite?.expiresAt && invite.expiresAt.getTime() <= Date.now();
+  }
+
+  private async getBranchForInvite(
+    workspaceId: string,
+    branchId?: string | null,
+  ) {
+    const normalizedBranchId = branchId?.trim();
+    if (!normalizedBranchId) return null;
+
+    const branch = await this.branchesRepository.findOne({
+      where: { id: normalizedBranchId, workspaceId },
+    });
+
+    if (!branch) {
+      throw new NotFoundException('Selected branch was not found');
+    }
+
+    return branch;
+  }
+
+  private async applyInviteBranchAssignment(
+    invite: WorkspaceInvite,
+    userId: string,
+  ) {
+    if (!invite.branchId) {
+      return { assigned: false, branchId: null, reason: null };
+    }
+
+    const branch = await this.branchesRepository.findOne({
+      where: { id: invite.branchId, workspaceId: invite.workspaceId },
+    });
+
+    if (!branch) {
+      return {
+        assigned: false,
+        branchId: invite.branchId,
+        reason: 'Branch no longer exists',
+      };
+    }
+
+    const role = this.normalizeBranchRole(invite.branchRole || invite.role);
+    await this.branchAccessService.createOrUpdateBranchMembership(
+      branch.id,
+      userId,
+      role,
+      (invite.branchPermissions as BranchPermissionKey[] | null) || undefined,
+    );
+
+    if (role === 'manager') {
+      await this.branchesRepository.update(
+        { id: branch.id, workspaceId: invite.workspaceId },
+        { managerUserId: userId },
+      );
+    }
+
+    return { assigned: true, branchId: branch.id, reason: null };
   }
 
   private assertRoleCanBeAssigned(
@@ -618,6 +679,12 @@ export class WorkspaceService {
       role,
       dto.permissions,
     );
+    if (role === 'manager') {
+      await this.branchesRepository.update(
+        { id: branchId, workspaceId },
+        { managerUserId: userId },
+      );
+    }
     await this.auditLogService.log({
       workspaceId,
       branchId,
@@ -674,6 +741,11 @@ export class WorkspaceService {
         { id: branchId, workspaceId },
         { managerUserId: userId },
       );
+    } else {
+      await this.branchesRepository.update(
+        { id: branchId, workspaceId, managerUserId: userId },
+        { managerUserId: null },
+      );
     }
 
     await this.auditLogService.log({
@@ -711,6 +783,10 @@ export class WorkspaceService {
     }
     membership.isActive = false;
     await this.branchMembershipsRepository.save(membership);
+    await this.branchesRepository.update(
+      { id: branchId, workspaceId, managerUserId: userId },
+      { managerUserId: null },
+    );
     await this.auditLogService.log({
       workspaceId,
       branchId,
@@ -842,6 +918,7 @@ export class WorkspaceService {
 
     const pendingInvites = await this.invitesRepository.find({
       where: { workspaceId, status: 'pending' },
+      relations: ['branch'],
       order: { createdAt: 'DESC' },
     });
 
@@ -953,6 +1030,13 @@ export class WorkspaceService {
         id: invite.id,
         email: invite.email,
         role: this.normalizeWorkspaceRole(invite.role),
+        branchId: invite.branchId || null,
+        branchName: invite.branch?.name || null,
+        branchRole: invite.branchRole
+          ? this.normalizeBranchRole(invite.branchRole)
+          : invite.branchId
+            ? this.normalizeBranchRole(invite.role)
+            : null,
         status: invite.status,
         createdAt: invite.createdAt,
         expiresAt: invite.expiresAt,
@@ -1157,7 +1241,7 @@ export class WorkspaceService {
 
     const invites = await this.invitesRepository.find({
       where: { email: user.email.toLowerCase(), status: 'pending' },
-      relations: ['workspace'],
+      relations: ['workspace', 'branch'],
       order: { createdAt: 'DESC' },
     });
 
@@ -1165,6 +1249,9 @@ export class WorkspaceService {
       id: string;
       workspaceId: string;
       workspaceName: string;
+      branchId: string | null;
+      branchName: string | null;
+      branchRole: 'manager' | 'staff' | null;
       role: 'owner' | 'manager' | 'staff';
       status: 'pending' | 'accepted' | 'declined' | 'expired';
       createdAt: Date;
@@ -1187,6 +1274,11 @@ export class WorkspaceService {
         id: invite.id,
         workspaceId: invite.workspaceId,
         workspaceName: invite.workspace?.name || 'Workspace',
+        branchId: invite.branchId || null,
+        branchName: invite.branch?.name || null,
+        branchRole: invite.branchId
+          ? this.normalizeBranchRole(invite.branchRole || invite.role)
+          : null,
         role: this.normalizeWorkspaceRole(invite.role),
         status: invite.status,
         createdAt: invite.createdAt,
@@ -1248,6 +1340,10 @@ export class WorkspaceService {
     });
 
     if (existingMembership?.isActive) {
+      const branchAssignment = await this.applyInviteBranchAssignment(
+        invite,
+        userId,
+      );
       invite.status = 'accepted';
       invite.userId = userId;
       invite.acceptedAt = new Date();
@@ -1255,6 +1351,7 @@ export class WorkspaceService {
       return {
         accepted: true,
         alreadyMember: true,
+        branchAssignment,
         workspace: await this.getWorkspace(invite.workspaceId, userId),
       };
     }
@@ -1265,6 +1362,11 @@ export class WorkspaceService {
       this.normalizeWorkspaceRole(invite.role),
     );
 
+    const branchAssignment = await this.applyInviteBranchAssignment(
+      invite,
+      userId,
+    );
+
     invite.status = 'accepted';
     invite.userId = userId;
     invite.acceptedAt = new Date();
@@ -1273,6 +1375,7 @@ export class WorkspaceService {
     return {
       accepted: true,
       alreadyMember: false,
+      branchAssignment,
       workspace: await this.getWorkspace(invite.workspaceId, userId),
     };
   }
@@ -1280,7 +1383,13 @@ export class WorkspaceService {
   async inviteUser(
     workspaceId: string,
     requesterId: string,
-    inviteDto: { email: string; role?: string },
+    inviteDto: {
+      email: string;
+      role?: string;
+      branchId?: string;
+      branchRole?: 'manager' | 'staff';
+      permissions?: BranchPermissionKey[];
+    },
   ) {
     const normalizedEmail = inviteDto.email?.trim().toLowerCase();
     if (!normalizedEmail) {
@@ -1293,49 +1402,79 @@ export class WorkspaceService {
       ? 'owner'
       : this.getEffectiveWorkspaceRole(membership || parentMembership);
     this.assertRoleCanBeAssigned(requesterRole, inviteRole);
+    const branch = await this.getBranchForInvite(workspaceId, inviteDto.branchId);
+    const branchRole = branch
+      ? this.normalizeBranchRole(inviteDto.branchRole || inviteRole)
+      : null;
+    const branchPermissions = branch
+      ? this.branchAccessService.normalizePermissions(
+          branchRole || 'staff',
+          inviteDto.permissions,
+        )
+      : null;
+
+    const user = await this.usersRepository.findOne({
+      where: { email: normalizedEmail },
+    });
+
+    if (user) {
+      const existingMembership = await this.membershipsRepository.findOne({
+        where: { workspaceId, userId: user.id, isActive: true },
+      });
+
+      if (existingMembership) {
+        await this.createOrUpdateMembership(workspaceId, user.id, inviteRole);
+
+        if (branch && branchRole) {
+          await this.branchAccessService.createOrUpdateBranchMembership(
+            branch.id,
+            user.id,
+            branchRole,
+            branchPermissions || undefined,
+          );
+
+          if (branchRole === 'manager') {
+            await this.branchesRepository.update(
+              { id: branch.id, workspaceId },
+              { managerUserId: user.id },
+            );
+          }
+        }
+
+        return {
+          invited: false,
+          email: normalizedEmail,
+          workspaceId,
+          alreadyMember: true,
+          assignedToBranch: !!branch,
+          branchId: branch?.id || null,
+          branchRole,
+        };
+      }
+    }
+
+    const inviteCode = this.generateInviteCode();
+    const expiresAt = this.getInviteExpiryDate();
     const existingPendingInvite = await this.invitesRepository.findOne({
       where: { workspaceId, email: normalizedEmail, status: 'pending' },
       order: { createdAt: 'DESC' },
     });
-    if (existingPendingInvite && !this.isInviteExpired(existingPendingInvite)) {
-      throw new BadRequestException(
-        'A pending invite already exists for this email',
-      );
-    }
-    if (existingPendingInvite && this.isInviteExpired(existingPendingInvite)) {
-      existingPendingInvite.status = 'expired';
-      await this.invitesRepository.save(existingPendingInvite);
-    }
 
-    // Check if user exists
-    const user = await this.usersRepository.findOne({
-      where: { email: normalizedEmail },
-    });
-    let alreadyMember = false;
-    if (user) {
-      const membership = await this.membershipsRepository.findOne({
-        where: { workspaceId, userId: user.id, isActive: true },
-      });
-      alreadyMember = !!membership;
-    }
-    if (alreadyMember) {
-      throw new BadRequestException('User already belongs to this workspace');
-    }
-    // Create invite record
-    const inviteCode = this.generateInviteCode();
-    const expiresAt = this.getInviteExpiryDate();
-    const invite = this.invitesRepository.create({
-      email: normalizedEmail,
-      userId: user?.id || null,
-      workspaceId,
-      status: 'pending',
-      role: inviteRole,
-      inviteCode,
-      expiresAt,
-      acceptedAt: null,
-    });
+    const invite =
+      existingPendingInvite || this.invitesRepository.create({ workspaceId });
+    invite.email = normalizedEmail;
+    invite.userId = user?.id || null;
+    invite.workspaceId = workspaceId;
+    invite.status = 'pending';
+    invite.role = inviteRole;
+    invite.branchId = branch?.id || null;
+    invite.branchRole = branchRole;
+    invite.branchPermissions = branchPermissions;
+    invite.inviteCode = inviteCode;
+    invite.expiresAt = expiresAt;
+    invite.acceptedAt = null;
     await this.invitesRepository.save(invite);
-    // Send invite email
+
     const emailReadiness = this.emailService.getDeliveryReadiness();
     let delivery: 'queued' | 'manual_code_required' = 'queued';
 
@@ -1343,8 +1482,8 @@ export class WorkspaceService {
       this.emailQueueService.enqueue({
         to: normalizedEmail,
         subject: `Invitation to join workspace '${workspace.name}'`,
-        text: `You have been invited to join workspace '${workspace.name}' as ${inviteRole}. Your invite code is ${inviteCode}. This code expires in ${this.inviteExpiryDays} days. Sign in to BizRecord and enter the code to accept.`,
-        html: `<p>You have been invited to join workspace '<b>${workspace.name}</b>' as <b>${inviteRole}</b>.</p><p>Your invite code is <b>${inviteCode}</b>.</p><p>This code expires on <b>${expiresAt.toDateString()}</b>.</p><p>Sign in to BizRecord and enter the code to accept the invite.</p>`,
+        text: `You have been invited to join workspace '${workspace.name}' as ${inviteRole}.${branch ? ` You will also be added to branch '${branch.name}' as ${branchRole}.` : ''} Your invite code is ${inviteCode}. This code expires in ${this.inviteExpiryDays} days. Sign in to BizRecord and enter the code to accept.`,
+        html: `<p>You have been invited to join workspace '<b>${workspace.name}</b>' as <b>${inviteRole}</b>.</p>${branch ? `<p>Once accepted, you will also be added to branch '<b>${branch.name}</b>' as <b>${branchRole}</b>.</p>` : ''}<p>Your invite code is <b>${inviteCode}</b>.</p><p>This code expires on <b>${expiresAt.toDateString()}</b>.</p><p>Sign in to BizRecord and enter the code to accept the invite.</p>`,
       });
     } else {
       delivery = 'manual_code_required';
@@ -1355,6 +1494,8 @@ export class WorkspaceService {
       email: normalizedEmail,
       workspaceId,
       inviteId: invite.id,
+      branchId: branch?.id || null,
+      branchRole,
       expiresAt,
       delivery,
       inviteCode: delivery === 'manual_code_required' ? inviteCode : undefined,

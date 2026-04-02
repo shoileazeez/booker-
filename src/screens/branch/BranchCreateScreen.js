@@ -11,6 +11,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { useTheme } from '../../theme/ThemeContext';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { api } from '../../api/client';
@@ -40,6 +41,8 @@ export default function BranchCreateScreen({ navigation }) {
   const [location, setLocation] = useState('');
   const [managerQuery, setManagerQuery] = useState('');
   const [selectedManager, setSelectedManager] = useState(null);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('staff');
   const [teamMembers, setTeamMembers] = useState([]);
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamError, setTeamError] = useState('');
@@ -145,7 +148,7 @@ export default function BranchCreateScreen({ navigation }) {
 
     setLoading(true);
     try {
-      await api.post(`/workspaces/${currentWorkspaceId}/branches`, {
+      const createdBranch = await api.post(`/workspaces/${currentWorkspaceId}/branches`, {
         name: branchName.trim(),
         description: [location.trim(), phone.trim(), address.trim()].filter(Boolean).join(' | '),
         location: location.trim(),
@@ -154,7 +157,27 @@ export default function BranchCreateScreen({ navigation }) {
         managerUserId: selectedManager?.id,
       });
 
-      Alert.alert('Branch Created', `${branchName.trim()} - ${location.trim()}`, [
+      let followUpMessage = `${branchName.trim()} - ${location.trim()}`;
+      const normalizedInviteEmail = inviteEmail.trim().toLowerCase();
+      if (normalizedInviteEmail && createdBranch?.id) {
+        const inviteResult = await api.post(`/workspaces/${currentWorkspaceId}/team/invite`, {
+          email: normalizedInviteEmail,
+          role: inviteRole,
+          branchId: createdBranch.id,
+          branchRole: inviteRole,
+        });
+
+        if (inviteResult?.alreadyMember) {
+          followUpMessage += `\n\n${normalizedInviteEmail} was added to the branch immediately.`;
+        } else {
+          followUpMessage += `\n\n${normalizedInviteEmail} was invited to this branch as ${inviteRole}.`;
+          if (inviteRole === 'manager' && !selectedManager) {
+            followUpMessage += '\nThey will become the branch manager after accepting the invite.';
+          }
+        }
+      }
+
+      Alert.alert('Branch Created', followUpMessage, [
         {
           text: 'OK',
           onPress: () => {
@@ -360,6 +383,53 @@ export default function BranchCreateScreen({ navigation }) {
               </Text>
             </View>
           ) : null}
+        </Card>
+
+        <Card style={{ marginBottom: 16 }}>
+          <Text style={{ color: theme.colors.textPrimary, fontSize: 15, fontWeight: '700', marginBottom: 6 }}>
+            Invite New Team Member
+          </Text>
+          <Subtle>Optional. Add someone to this branch now instead of waiting to invite them later.</Subtle>
+
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: theme.colors.card,
+                color: theme.colors.textPrimary,
+                borderColor: theme.colors.border,
+                marginTop: 12,
+              },
+            ]}
+            placeholder="Email address"
+            placeholderTextColor={theme.colors.textSecondary}
+            value={inviteEmail}
+            onChangeText={setInviteEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+
+          <View
+            style={[
+              styles.input,
+              {
+                padding: 0,
+                overflow: 'hidden',
+                backgroundColor: theme.colors.card,
+                borderColor: theme.colors.border,
+                marginTop: 12,
+              },
+            ]}
+          >
+            <Picker selectedValue={inviteRole} onValueChange={setInviteRole} style={{ color: theme.colors.textPrimary }}>
+              <Picker.Item label="Staff" value="staff" />
+              <Picker.Item label="Manager" value="manager" />
+            </Picker>
+          </View>
+
+          <Text style={{ color: theme.colors.textSecondary, fontSize: 11, marginTop: 8 }}>
+            If this email already belongs to your workspace, the person will be added to the branch immediately.
+          </Text>
         </Card>
 
         <Card style={{ marginBottom: 16 }}>
