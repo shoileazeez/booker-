@@ -37,6 +37,7 @@ export class ReceiptService {
     const itemCategory = transaction.item?.category || '-';
     const itemLocation = transaction.item?.location || '-';
     const currentStock = Number(transaction.item?.quantity || 0);
+    const branchName = transaction.branch?.name || 'Main workspace';
     const transactionLabel =
       transaction.type === 'debt' ? 'Debt Sale Receipt' : 'Sales Receipt';
     const amountLabel =
@@ -56,7 +57,7 @@ export class ReceiptService {
     doc
       .fontSize(10)
       .fillColor('#cbd5e1')
-      .text('Professional Business Receipt', 40, 62, { align: 'left' });
+      .text('Workspace Transaction Record', 40, 62, { align: 'left' });
     doc
       .fontSize(16)
       .fillColor('#ffffff')
@@ -80,7 +81,11 @@ export class ReceiptService {
       .fontSize(10)
       .fillColor('#6b7280')
       .text(`Receipt ID: ${transaction.id}`)
-      .text(`Recorded by: ${transaction.createdBy?.name || 'Team member'}`)
+      .text(`Issued for workspace: ${workspaceName}`)
+      .text(`Branch: ${branchName}`)
+      .text(
+        `Recorded by team member: ${transaction.createdBy?.name || 'Team member'}`,
+      )
       .text(`Payment method: ${(transaction.paymentMethod || 'cash').toUpperCase()}`)
       .text(`Status: ${(transaction.status || 'pending').toUpperCase()}`);
     if (transaction.dueDate) {
@@ -164,7 +169,7 @@ export class ReceiptService {
     doc
       .fillColor('#0f172a')
       .fontSize(10)
-      .text('Thank you for your business.', 40, doc.y + 10, {
+      .text('This receipt was issued by the workspace provider listed above.', 40, doc.y + 10, {
         align: 'center',
         width: contentWidth,
       })

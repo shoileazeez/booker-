@@ -172,9 +172,6 @@ export class TransactionsService {
         throw new BadRequestException('totalAmount cannot be negative');
       }
 
-      // Store final effective per-unit selling price after discount distribution.
-      unitPrice = quantity > 0 ? Number((totalAmount / quantity).toFixed(2)) : 0;
-
       item.quantity = Number((currentStock - quantity).toFixed(2));
       await this.itemsRepository.save(item);
     }

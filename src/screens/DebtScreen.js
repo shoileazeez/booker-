@@ -26,6 +26,13 @@ import {
   AppButton,
 } from '../components/UI';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
+
+const isDebtLike = (item = {}) => {
+  const type = String(item?.type || '').toLowerCase();
+  const paymentMethod = String(item?.paymentMethod || '').toLowerCase();
+  return type === 'debt' || paymentMethod === 'credit';
+};
 
 const getDueInfo = (dueDate) => {
   if (!dueDate) return { label: 'No due date', overdue: false };
@@ -94,7 +101,15 @@ const mergeByIdentity = (primary = [], secondary = []) => {
 export default function DebtScreen({ navigation }) {
   const themeContext = useTheme();
   const theme = themeContext.theme;
-  const { currentWorkspaceId, activeBranchId, repo } = useWorkspace();
+  const {
+    currentWorkspaceId,
+    activeBranchId,
+    currentBranchId,
+    workspaces,
+    branches,
+    repo,
+  } = useWorkspace();
+  const { user } = useAuth();
   const { width } = useWindowDimensions();
 
   const [debts, setDebts] = useState([]);
@@ -138,7 +153,7 @@ export default function DebtScreen({ navigation }) {
           for (let i = 0; i < localDebtRows.rows.length; i += 1) {
             const row = localDebtRows.rows.item(i);
             const data = row.data ? JSON.parse(row.data) : {};
-            if (String(data.type || '').toLowerCase() === 'debt') {
+            if (isDebtLike(data)) {
               localList.push({
                 ...data,
                 id: data.id ?? row.server_id ?? row.local_id,
@@ -153,7 +168,7 @@ export default function DebtScreen({ navigation }) {
           for (let i = 0; i < localTransactionRows.rows.length; i += 1) {
             const row = localTransactionRows.rows.item(i);
             const data = row.data ? JSON.parse(row.data) : {};
-            if (String(data.type || '').toLowerCase() === 'debt') {
+            if (isDebtLike(data)) {
               localList.push({
                 ...data,
                 id: data.id ?? row.server_id ?? row.local_id,
@@ -165,13 +180,11 @@ export default function DebtScreen({ navigation }) {
         }
 
         try {
-          const data = await api.get(
-            transactionPath,
-            { type: 'debt' },
-          );
+          const data = await api.get(transactionPath, { take: 100 });
           const list = Array.isArray(data) ? data : [];
-          setDebts(mergeByIdentity(list, localList));
-          cacheDebts(transactionScopeId, list).catch(() => null);
+          const debtOnly = list.filter(isDebtLike);
+          setDebts(mergeByIdentity(debtOnly, localList));
+          cacheDebts(transactionScopeId, debtOnly).catch(() => null);
         } catch {
           // Stay on local debt snapshot when offline.
           setDebts(dedupeDebts(localList));
@@ -220,7 +233,12 @@ export default function DebtScreen({ navigation }) {
     return null;
   };
 
-  const sendWhatsApp = (phone, name, amount) => {
+  const currentWorkspace = workspaces?.find((item) => String(item?.id) === String(currentWorkspaceId));
+  const selectedBranch = branches?.find(
+    (item) => String(item?.id) === String(activeBranchId || currentBranchId || ''),
+  );
+
+  const sendWhatsApp = (phone, name, amount, debtRecord = null) => {
     const normalizedPhone = normalizeWhatsAppNumber(phone);
     if (!normalizedPhone) {
       Alert.alert(
@@ -229,7 +247,23 @@ export default function DebtScreen({ navigation }) {
       );
       return;
     }
-    const message = `Hello ${name}, this is a reminder from your shop regarding your balance of NGN ${amount.toFixed(2)}. Please make payment when you can.`;
+    const workspaceName =
+      debtRecord?.workspace?.name || currentWorkspace?.name || 'BizRecord Workspace';
+    const branchName =
+      debtRecord?.branch?.name || selectedBranch?.name || 'Main branch';
+    const senderName =
+      debtRecord?.createdBy?.name || user?.name || 'Team member';
+    const message = [
+      `Dear ${name},`,
+      '',
+      `This is a payment reminder from ${workspaceName} (${branchName}).`,
+      `Outstanding balance: NGN ${amount.toFixed(2)}.`,
+      '',
+      `Recorded by: ${senderName}`,
+      `Provider: ${workspaceName}`,
+      '',
+      'Kindly make payment at your earliest convenience. Thank you.',
+    ].join('\n');
     const encoded = encodeURIComponent(message);
     const url = `https://wa.me/${normalizedPhone}?text=${encoded}`;
     Linking.openURL(url).catch(() => {
@@ -474,6 +508,7 @@ export default function DebtScreen({ navigation }) {
                           item.phone || '',
                           item.customerName || 'Friend',
                           amount,
+                          item,
                         )
                       }
                       style={[
