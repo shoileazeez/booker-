@@ -249,19 +249,26 @@ export class WorkspaceService {
       throw new NotFoundException('User not found');
     }
 
-    const subscription =
-      await this.billingService.getCurrentSubscription(userId);
-    const normalizedPlan: 'basic' | 'pro' =
-      subscription.plan === 'pro' ? 'pro' : 'basic';
-    const planLimit = subscription.limits.workspaceLimit;
-    const currentWorkspaceCount = subscription.limits.workspaceUsed;
+    const subscription = await this.billingService.getCurrentSubscription(
+      userId,
+    );
+    const usage = await this.billingService.getUsage(userId);
+    const normalizedPlan: 'basic' | 'pro' = subscription?.plan === 'pro' ? 'pro' : 'basic';
+    const planLimit = usage?.limits?.workspaceLimit ?? (normalizedPlan === 'basic' ? 1 : 3);
+    // Count current top-level workspaces for this user via memberships
+    const memberships = await this.membershipsRepository.find({
+      where: { userId, isActive: true },
+      relations: ['workspace'],
+    });
+    const currentWorkspaceCount = memberships.filter(
+      (m) => !m.workspace.parentWorkspaceId,
+    ).length;
 
-    if (subscription.upgradeRequired) {
+    if (subscription && subscription.status === 'expired') {
       throw new ForbiddenException({
         statusCode: 403,
         code: 'SUBSCRIPTION_REQUIRED',
-        message:
-          'Your trial has ended. Please upgrade to a paid plan to continue.',
+        message: 'Your trial has ended. Please upgrade to a paid plan to continue.',
         meta: {
           plan: normalizedPlan,
           feature: 'workspace.create',

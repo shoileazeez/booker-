@@ -18,6 +18,14 @@ export class CreateTransactionDto {
   @IsString()
   itemId?: string;
 
+  @IsOptional()
+  lineItems?: Array<{
+    itemId: string;
+    quantity: number;
+    unitPrice?: number;
+    discountAmount?: number;
+  }>;
+
   @IsNumber()
   quantity: number;
 
@@ -55,6 +63,10 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsString()
+  customerEmail?: string;
 
   @IsOptional()
   @IsISO8601()

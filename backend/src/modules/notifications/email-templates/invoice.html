@@ -1,0 +1,32 @@
+<div style="padding:20px;font-family:Arial, Helvetica, sans-serif; color:#374151;">
+  <h2 style="color:#111827;margin-bottom:4px;">Your Receipt</h2>
+  <p style="color:#6b7280;margin-top:0;">Thank you for your purchase. A copy of your receipt is available below.</p>
+  <div style="margin:18px 0;">
+    <a href="{{receiptUrl}}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;">View Receipt</a>
+  </div>
+  <h3 style="font-size:14px;color:#111827;margin-bottom:8px;">Order Summary</h3>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+    <thead>
+      <tr>
+        <th style="text-align:left;padding:8px;background:#f3f4f6">Item</th>
+        <th style="text-align:right;padding:8px;background:#f3f4f6">Qty</th>
+        <th style="text-align:right;padding:8px;background:#f3f4f6">Unit</th>
+        <th style="text-align:right;padding:8px;background:#f3f4f6">Discount</th>
+        <th style="text-align:right;padding:8px;background:#f3f4f6">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each lineItems}}
+      <tr>
+        <td style="padding:8px;border-bottom:1px solid #eef2ff">{{name}}</td>
+        <td style="padding:8px;border-bottom:1px solid #eef2ff;text-align:right">{{quantity}}</td>
+        <td style="padding:8px;border-bottom:1px solid #eef2ff;text-align:right">{{unitPrice}}</td>
+        <td style="padding:8px;border-bottom:1px solid #eef2ff;text-align:right">{{discountAmount}}</td>
+        <td style="padding:8px;border-bottom:1px solid #eef2ff;text-align:right">{{total}}</td>
+      </tr>
+      {{/each}}
+    </tbody>
+  </table>
+  <p style="font-weight:700;color:#111827;text-align:right;margin:0;">Grand Total: {{grandTotal}}</p>
+  <p style="color:#6b7280;margin-top:16px;">If you have any questions, reply to this email or contact support.</p>
+</div>

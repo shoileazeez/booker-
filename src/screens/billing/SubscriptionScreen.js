@@ -10,7 +10,11 @@ import {
   Linking,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Platform } from 'react-native';
+import * as GoogleBilling from '../../services/googleBilling';
 import { useTheme } from '../../theme/ThemeContext';
+import { useWorkspace } from '../../context/WorkspaceContext';
+import { useAuth } from '../../context/AuthContext';
 import { Card, AppButton, Title } from '../../components/UI';
 import { api } from '../../api/client';
 
@@ -29,6 +33,12 @@ export default function SubscriptionScreen({ navigation }) {
   const [addons, setAddons] = useState({ workspaceSlots: 0, staffSeats: 0, whatsappBundles: 0 });
   const [lastReference, setLastReference] = useState(null);
   const [onlineRequired, setOnlineRequired] = useState(false);
+
+  const workspace = useWorkspace();
+  const { user } = useAuth();
+  const currentWorkspace = workspace.currentWorkspace || workspace.workspaces.find((w) => w.id === workspace.currentWorkspaceId);
+  const userRole = currentWorkspace?.role || user?.role || 'user';
+  const isWorkspaceOwner = userRole === 'owner';
 
   const addonsAllowed = subscription?.trial?.addonsAllowed !== false;
 
@@ -105,34 +115,55 @@ export default function SubscriptionScreen({ navigation }) {
   };
 
   const startCheckout = async () => {
+    if (!isWorkspaceOwner) {
+      Alert.alert('Permission required', 'Only workspace owners can purchase or upgrade subscriptions for this workspace.');
+      return;
+    }
     if (onlineRequired) {
       Alert.alert('Internet required', 'Billing requires internet connection. Come online to upgrade or renew this workspace.');
       return;
     }
-    try {
-      setProcessing(true);
-      const payload = {
-        plan: selectedPlan,
-        billingCycle,
-        addonWorkspaceSlots: addonsAllowed ? addons.workspaceSlots : 0,
-        addonStaffSeats: addonsAllowed ? addons.staffSeats : 0,
-        addonWhatsappBundles: addonsAllowed ? addons.whatsappBundles : 0,
+    // Prefer native Google Play Billing on Android when available.
+    if (Platform.OS === 'android' && GoogleBilling.isAvailable()) {
+      // Map product ids to your Play Console SKUs. Update these values to match your Play Console.
+      const SKU_MAP = {
+        pro_monthly: 'bizrecord_pro_monthly',
+        pro_yearly: 'bizrecord_pro_yearly',
+        basic_monthly: 'bizrecord_basic_monthly',
       };
-      const response = await api.post('/billing/checkout', payload);
-      setLastReference(response?.reference || null);
-      if (response?.authUrl) {
-        await Linking.openURL(response.authUrl);
-      } else {
-        Alert.alert('Checkout', 'Payment initialized. Please complete payment and then verify.');
+      const key = `${selectedPlan}_${billingCycle}`;
+      const sku = SKU_MAP[key] || SKU_MAP.pro_monthly;
+      try {
+        setProcessing(true);
+        const purchase = await GoogleBilling.purchaseSubscription(sku);
+        // purchase should include { purchaseToken, orderId, productId }
+        const payload = {
+          packageName: process.env.EXPO_PUBLIC_ANDROID_PACKAGE || 'com.bizrecord.app',
+          productId: purchase.productId || sku,
+          purchaseToken: purchase.purchaseToken || purchase.token,
+          purchaseType: 'subscription',
+          workspaceId: currentWorkspace?.id,
+        };
+        const result = await api.post('/billing/verify/google', payload);
+        if (result?.verified) {
+          Alert.alert('Subscription', 'Subscription verified and activated.');
+          await refreshBilling();
+        } else {
+          Alert.alert('Subscription', 'Purchase verified but server reported an issue.');
+        }
+      } catch (err) {
+        Alert.alert('Google Billing', err?.message || 'Purchase failed');
+      } finally {
+        setProcessing(false);
       }
-    } catch (err) {
-      if (isLikelyOfflineError(err)) {
-        setOnlineRequired(true);
-      }
-      Alert.alert('Checkout failed', err?.message || 'Unable to initialize payment.');
-    } finally {
-      setProcessing(false);
+      return;
     }
+
+    // Fallback: non-Android clients should use the Play Store / contact support.
+    Alert.alert(
+      'Unsupported platform',
+      'Direct web checkout is deprecated. Use the Google Play Store (Android) to purchase subscriptions, or contact support for alternative billing.',
+    );
   };
 
   const verifyLastPayment = async () => {
@@ -302,13 +333,13 @@ export default function SubscriptionScreen({ navigation }) {
           icon="payments"
           onPress={startCheckout}
           loading={processing}
-          disabled={processing}
+          disabled={processing || !isWorkspaceOwner}
         />
         <AppButton
           title="Verify last payment"
           variant="secondary"
           onPress={verifyLastPayment}
-          disabled={processing}
+          disabled={processing || !isWorkspaceOwner}
           style={{ marginTop: 10 }}
         />
       </Card>

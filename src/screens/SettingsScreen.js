@@ -37,6 +37,7 @@ const SettingsScreen = function({ navigation }) {
   const currentBranch = workspace.currentBranch || workspace.branches?.find((b) => b.id === workspace.currentBranchId);
   const workspaceAccessBlocked = !!currentWorkspace && String(currentWorkspace?.status || 'active').toLowerCase() !== 'active';
   const userRole = currentWorkspace?.role || user?.role || 'user';
+  const isWorkspaceOwner = userRole === 'owner';
   const canManageWorkspace = !workspaceAccessBlocked && (userRole === 'owner' || userRole === 'manager');
   const normalizedPlan = user?.plan === 'pro' ? 'pro' : 'basic';
   const planLimit = normalizedPlan === 'pro' ? 3 : 1;
@@ -145,7 +146,13 @@ const SettingsScreen = function({ navigation }) {
                 </Text>
               </View>
             </View>
-            <TouchableOpacity onPress={() => navigation.navigate('Subscription')}>
+            <TouchableOpacity onPress={() => {
+              if (!isWorkspaceOwner) {
+                Alert.alert('Permission required', 'Only workspace owners can manage subscriptions.');
+                return;
+              }
+              navigation.navigate('Subscription');
+            }}>
               <MaterialIcons name="chevron-right" size={24} color={theme.colors.primary} />
             </TouchableOpacity>
           </View>
@@ -207,7 +214,13 @@ const SettingsScreen = function({ navigation }) {
               </Text>
             </View>
           </View>
-          <TouchableOpacity onPress={() => openUpgradeModal('plan.view')}>
+          <TouchableOpacity onPress={() => {
+            if (!isWorkspaceOwner) {
+              Alert.alert('Permission required', 'Only workspace owners can upgrade the workspace plan.');
+              return;
+            }
+            openUpgradeModal('plan.view');
+          }}>
             <MaterialIcons name="arrow-upward" size={24} color={theme.colors.primary} />
           </TouchableOpacity>
         </View>
@@ -222,7 +235,7 @@ const SettingsScreen = function({ navigation }) {
               </Text>
             </View>
           </View>
-          <TouchableOpacity onPress={() => setShowWorkspaceModal(true)}>
+            <TouchableOpacity onPress={() => navigation.navigate('UserSettings')}>
             <MaterialIcons name="swap-horiz" size={24} color={theme.colors.primary} />
           </TouchableOpacity>
         </View>

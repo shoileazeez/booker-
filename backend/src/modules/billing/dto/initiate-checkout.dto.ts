@@ -2,7 +2,7 @@ import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class InitiateCheckoutDto {
   @IsIn(['basic', 'pro'])
-  plan: 'basic' | 'pro';
+  plan!: 'basic' | 'pro';
 
   @IsOptional()
   @IsIn(['monthly', 'yearly'])

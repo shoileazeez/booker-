@@ -31,7 +31,9 @@ export class ReceiptService {
     doc.on('end', async () => {});
 
     const workspaceName = transaction.workspace?.name || 'BizRecord Workspace';
+    const workspaceLogo = transaction.workspace?.logo || null;
     const customerName = transaction.customerName || 'Walk-in customer';
+    const customerEmail = transaction.customerEmail || '';
     const itemName = transaction.item?.name || 'General transaction';
     const itemSku = transaction.item?.sku || '-';
     const itemCategory = transaction.item?.category || '-';
@@ -50,10 +52,33 @@ export class ReceiptService {
     const contentWidth = pageWidth - 80;
 
     doc.rect(0, 0, pageWidth, 110).fill('#0f172a');
-    doc
-      .fillColor('#ffffff')
-      .fontSize(22)
-      .text('BizRecord', 40, 32, { align: 'left' });
+    // Try to render a logo if one is available (best-effort)
+    try {
+      if (workspaceLogo) {
+        // Attempt to fetch image buffer (node >=18 provides global fetch)
+        const res = await fetch(workspaceLogo as string).catch(() => null);
+        if (res && res.ok) {
+          const buf = Buffer.from(await res.arrayBuffer());
+          doc.image(buf, 40, 30, { width: 60, height: 60 });
+        } else {
+          doc
+            .fillColor('#ffffff')
+            .fontSize(22)
+            .text('BizRecord', 40, 32, { align: 'left' });
+        }
+      } else {
+        doc
+          .fillColor('#ffffff')
+          .fontSize(22)
+          .text('BizRecord', 40, 32, { align: 'left' });
+      }
+    } catch {
+      doc
+        .fillColor('#ffffff')
+        .fontSize(22)
+        .text('BizRecord', 40, 32, { align: 'left' });
+    }
+
     doc
       .fontSize(10)
       .fillColor('#cbd5e1')
@@ -111,21 +136,49 @@ export class ReceiptService {
       .fillColor('#374151')
       .fontSize(10)
       .text(`Customer Name: ${customerName}`, 48)
+      .text(`Customer Email: ${customerEmail || '-'}`, 48)
       .text(`Phone Number: ${transaction.phone || '-'}`, 48)
       .moveDown(0.7);
 
     sectionHeader('TRANSACTION DETAILS');
-    doc
-      .fillColor('#374151')
-      .fontSize(10)
-      .text(`Item: ${itemName}`, 48)
-      .text(`SKU: ${itemSku}`, 48)
-      .text(`Category: ${itemCategory}`, 48)
-      .text(`Location: ${itemLocation}`, 48)
-      .text(`Quantity: ${Number(transaction.quantity || 0)}`, 48)
-      .text(`Unit Price: ${formatCurrency(Number(transaction.unitPrice || 0))}`, 48)
-      .text(`Remaining Stock: ${currentStock}`, 48)
-      .moveDown(0.7);
+    doc.fillColor('#374151').fontSize(10);
+    // If this transaction has line items, render a table
+    if (transaction.lineItems && Array.isArray(transaction.lineItems) && transaction.lineItems.length) {
+      const headers = ['Item', 'Qty', 'Unit', 'Discount', 'Total'];
+      const startX = 48;
+      const colWidths = [contentWidth * 0.45, contentWidth * 0.12, contentWidth * 0.14, contentWidth * 0.14, contentWidth * 0.15];
+      // header row
+      let x = startX;
+      headers.forEach((h, i) => {
+        doc.fontSize(10).fillColor('#111827').text(h, x, doc.y);
+        x += colWidths[i];
+      });
+      doc.moveDown(0.6);
+      // rows
+      transaction.lineItems.forEach((li: any) => {
+        let x = startX;
+        doc.fillColor('#374151').fontSize(10).text(li.name || li.itemId, x, doc.y, { width: colWidths[0] });
+        x += colWidths[0];
+        doc.text(String(li.quantity), x, doc.y, { width: colWidths[1] });
+        x += colWidths[1];
+        doc.text(formatCurrency(Number(li.unitPrice || 0)), x, doc.y, { width: colWidths[2] });
+        x += colWidths[2];
+        doc.text(formatCurrency(Number(li.discountAmount || 0)), x, doc.y, { width: colWidths[3] });
+        x += colWidths[3];
+        doc.text(formatCurrency(Number(li.total || 0)), x, doc.y, { width: colWidths[4] });
+        doc.moveDown(0.6);
+      });
+    } else {
+      doc
+        .text(`Item: ${itemName}`, 48)
+        .text(`SKU: ${itemSku}`, 48)
+        .text(`Category: ${itemCategory}`, 48)
+        .text(`Location: ${itemLocation}`, 48)
+        .text(`Quantity: ${Number(transaction.quantity || 0)}`, 48)
+        .text(`Unit Price: ${formatCurrency(Number(transaction.unitPrice || 0))}`, 48)
+        .text(`Remaining Stock: ${currentStock}`, 48)
+        .moveDown(0.7);
+    }
 
     const totalsY = doc.y;
     doc.rect(40, totalsY, contentWidth, 62).fill('#eff6ff');

@@ -70,6 +70,12 @@ export class Transaction {
   @Column({ nullable: true })
   receiptUrl: string;
 
+  @Column({ type: 'jsonb', nullable: true })
+  lineItems: any[] | null;
+
+  @Column({ name: 'customer_email', nullable: true })
+  customerEmail: string | null;
+
   @ManyToOne(() => Workspace, (workspace) => workspace.transactions, {
     onDelete: 'CASCADE',
   })

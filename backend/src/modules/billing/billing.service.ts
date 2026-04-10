@@ -7,10 +7,12 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
+import { google } from 'googleapis';
 import { User } from '../auth/entities/user.entity';
 import { Workspace } from '../workspace/entities/workspace.entity';
 import { Subscription } from './entities/subscription.entity';
 import { Payment } from './entities/payment.entity';
+import { WorkspaceMembership } from '../workspace/entities/workspace-membership.entity';
 import { InitiateCheckoutDto } from './dto/initiate-checkout.dto';
 import { EmailQueueService } from '../notifications/email-queue.service';
 import { EmailTemplateService } from '../notifications/email-template.service';
@@ -41,6 +43,8 @@ export class BillingService {
     private subscriptionsRepository: Repository<Subscription>,
     @InjectRepository(Payment)
     private paymentsRepository: Repository<Payment>,
+    @InjectRepository(WorkspaceMembership)
+    private workspaceMembershipsRepository: Repository<WorkspaceMembership>,
     private readonly emailQueueService: EmailQueueService,
     private readonly emailTemplateService: EmailTemplateService,
     private readonly pushService: PushService,
@@ -95,6 +99,34 @@ export class BillingService {
     };
   }
 
+  // Public API used by controller
+  getPlans() {
+    return {
+      plans: [
+        { key: 'basic', name: 'Basic', monthly: PLAN_PRICES_NGN.basic, yearly: this.toCycleAmount(PLAN_PRICES_NGN.basic, 'yearly') },
+        { key: 'pro', name: 'Pro', monthly: PLAN_PRICES_NGN.pro, yearly: this.toCycleAmount(PLAN_PRICES_NGN.pro, 'yearly') },
+      ],
+    };
+  }
+
+  async getCurrentSubscription(userId: string) {
+    const subscription = await this.subscriptionsRepository.findOne({ where: { userId } });
+    return subscription || null;
+  }
+
+  async getUsage(userId: string) {
+    const subscription = await this.subscriptionsRepository.findOne({ where: { userId } });
+    if (!subscription) return { whatsappMessagesUsedThisMonth: 0 };
+    return {
+      whatsappMessagesUsedThisMonth: subscription.whatsappMessagesUsedThisMonth || 0,
+      limits: this.computeLimits(subscription.plan as PlanKey, {
+        workspaceSlots: subscription.addonWorkspaceSlots || 0,
+        staffSeats: subscription.addonStaffSeats || 0,
+        whatsappBundles: subscription.addonWhatsappBundles || 0,
+      }),
+    };
+  }
+
   private async findOrCreateSubscription(user: User) {
     let subscription = await this.subscriptionsRepository.findOne({
       where: { userId: user.id },
@@ -141,315 +173,218 @@ export class BillingService {
     return { isTrialing, isTrialExpired, trialEndsAtMs, now };
   }
 
-  private async paystackRequest(path: string, init?: RequestInit) {
-    const secretKey = process.env.PAYSTACK_SECRET_KEY;
-    if (!secretKey) {
-      throw new BadRequestException('PAYSTACK_SECRET_KEY is not configured');
+  
+
+  /**
+   * Verify a Google Play purchase (in-app product or subscription) using
+   * Google Play Developer API. Requires service account JSON in
+   * GOOGLE_SERVICE_ACCOUNT_JSON env var and Android package name.
+   */
+  async verifyGooglePurchase(userId: string, dto: { packageName: string; productId: string; purchaseToken: string; purchaseType?: 'subscription' | 'product' }) {
+    const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+    if (!serviceAccountJson) {
+      throw new BadRequestException('Google service account not configured');
     }
 
-    const res = await fetch(`https://api.paystack.co${path}`, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${secretKey}`,
-        'Content-Type': 'application/json',
-        ...(init?.headers || {}),
-      },
-    });
-
-    const payload = (await res.json()) as Record<string, any>;
-    if (!res.ok || payload?.status === false) {
-      throw new BadRequestException(
-        payload?.message || 'Paystack request failed',
-      );
-    }
-    return payload;
-  }
-
-  getPlans() {
-    return {
-      currency: 'NGN',
-      trialPolicy: {
-        days: 14,
-        planDuringTrial: 'pro',
-        addonsAllowed: false,
-      },
-      yearlyDiscountPercent: 20,
-      basic: {
-        key: 'basic',
-        pricing: {
-          monthly: PLAN_PRICES_NGN.basic,
-          yearly: this.toCycleAmount(PLAN_PRICES_NGN.basic, 'yearly'),
-        },
-        included: {
-          workspaceLimit: 1,
-          products: 'unlimited',
-          transactions: 'unlimited',
-          features: [
-            'inventory_management',
-            'debt_tracking',
-            'expense_tracking',
-            'basic_reports',
-            'csv_excel_export',
-            'receipt_generation',
-            'customer_profiles',
-            'low_stock_push_notifications',
-          ],
-        },
-      },
-      pro: {
-        key: 'pro',
-        pricing: {
-          monthly: PLAN_PRICES_NGN.pro,
-          yearly: this.toCycleAmount(PLAN_PRICES_NGN.pro, 'yearly'),
-        },
-        included: {
-          workspaceLimit: 3,
-          staffSeatLimit: 5,
-          whatsappMonthlyQuota: 100,
-          features: [
-            'everything_in_basic',
-            'advanced_reports_and_trends',
-            'whatsapp_debt_reminders',
-            'whatsapp_payment_receipts',
-            'whatsapp_low_stock_alerts_owner',
-            'whatsapp_monthly_business_summary',
-            'priority_support',
-          ],
-        },
-        addons: {
-          workspaceSlot: {
-            monthly: 1500,
-            yearly: this.toCycleAmount(1500, 'yearly'),
-            yearlyDiscountPercent: 20,
-          },
-          staffSeat: {
-            monthly: 500,
-            yearly: this.toCycleAmount(500, 'yearly'),
-            yearlyDiscountPercent: 20,
-          },
-          whatsappBundle100: {
-            monthly: 2000,
-            yearly: this.toCycleAmount(2000, 'yearly'),
-            yearlyDiscountPercent: 20,
-            messages: 100,
-          },
-        },
-      },
-    };
-  }
-
-  async getCurrentSubscription(userId: string) {
-    const user = await this.usersRepository.findOne({
-      where: { id: userId },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found');
+    let credentials: any;
+    try {
+      credentials = typeof serviceAccountJson === 'string' ? JSON.parse(serviceAccountJson) : serviceAccountJson;
+    } catch (e) {
+      throw new BadRequestException('Invalid GOOGLE_SERVICE_ACCOUNT_JSON');
     }
 
-    const { isTrialing, isTrialExpired, trialEndsAtMs, now } =
-      this.resolveTrialState(user);
-    const subscription = await this.findOrCreateSubscription(user);
-
-    const normalizedPlan: PlanKey = user.plan === 'pro' ? 'pro' : 'basic';
-
-    const addOns = {
-      workspaceSlots: subscription.addonWorkspaceSlots || 0,
-      staffSeats: subscription.addonStaffSeats || 0,
-      whatsappBundles: subscription.addonWhatsappBundles || 0,
-    };
-
-    const effectiveAddOns = isTrialing
-      ? { workspaceSlots: 0, staffSeats: 0, whatsappBundles: 0 }
-      : addOns;
-    const limits = this.computeLimits(normalizedPlan, effectiveAddOns);
-    const ownedWorkspaceCount = await this.workspacesRepository.count({
-      where: { createdBy: { id: userId } },
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/androidpublisher'],
     });
+    const client = await auth.getClient();
+    const androidpublisher = google.androidpublisher({ version: 'v3', auth: client });
 
-    return {
-      status: isTrialing ? 'trialing' : isTrialExpired ? 'expired' : 'active',
-      upgradeRequired: isTrialExpired,
-      plan: normalizedPlan,
-      trial: {
-        status: user.trialStatus,
-        startAt: user.trialStartAt,
-        endsAt: user.trialEndsAt,
-        daysLeft:
-          isTrialing && trialEndsAtMs
-            ? Math.ceil((trialEndsAtMs - now) / (24 * 60 * 60 * 1000))
-            : 0,
-        addonsAllowed: !isTrialing,
-      },
-      addOns: effectiveAddOns,
-      limits: {
-        ...limits,
-        workspaceUsed: ownedWorkspaceCount,
-      },
-      billing: {
-        subscriptionId: subscription.id,
-        lastPaymentReference: subscription.lastPaymentReference,
-        billingCycle: subscription.billingCycle || 'monthly',
-      },
-    };
-  }
+    const pkg = dto.packageName;
+    const productId = dto.productId;
+    const token = dto.purchaseToken;
+    const type = dto.purchaseType === 'subscription' ? 'subscription' : 'product';
 
-  async getUsage(userId: string) {
-    const subscription = await this.getCurrentSubscription(userId);
-    const user = await this.usersRepository.findOne({ where: { id: userId } });
-    if (!user) throw new NotFoundException('User not found');
-    const persistedSubscription = await this.findOrCreateSubscription(user);
-
-    const whatsappUsed =
-      persistedSubscription.whatsappMessagesUsedThisMonth || 0;
-    const whatsappLimit = subscription.limits.whatsappMonthlyQuota;
-    const automationPaused =
-      whatsappLimit > 0 ? whatsappUsed >= whatsappLimit : true;
-
-    return {
-      workspace: {
-        used: subscription.limits.workspaceUsed,
-        limit: subscription.limits.workspaceLimit,
-      },
-      staff: {
-        used: null,
-        limit: subscription.limits.staffSeatLimit,
-      },
-      whatsapp: {
-        used: whatsappUsed,
-        limit: whatsappLimit,
-      },
-      automationPaused,
-      reason: automationPaused
-        ? whatsappLimit <= 0
-          ? 'WhatsApp quota unavailable for current plan'
-          : 'WhatsApp quota exhausted; buy add-on bundle to resume automation'
-        : null,
-    };
-  }
-
-  async initiateCheckout(userId: string, dto: InitiateCheckoutDto) {
-    const user = await this.usersRepository.findOne({ where: { id: userId } });
-    if (!user) throw new NotFoundException('User not found');
-
-    const { isTrialing } = this.resolveTrialState(user);
-    const targetPlan: PlanKey = dto.plan === 'pro' ? 'pro' : 'basic';
-    const billingCycle: BillingCycle =
-      dto.billingCycle === 'yearly' ? 'yearly' : 'monthly';
-    const requestedAddons = this.normalizeAddons({
-      workspaceSlots: dto.addonWorkspaceSlots,
-      staffSeats: dto.addonStaffSeats,
-      whatsappBundles: dto.addonWhatsappBundles,
-    });
-
-    if (
-      isTrialing &&
-      (requestedAddons.workspaceSlots > 0 ||
-        requestedAddons.staffSeats > 0 ||
-        requestedAddons.whatsappBundles > 0)
-    ) {
-      throw new ForbiddenException(
-        'Add-ons are not allowed during active trial.',
-      );
+    // For subscription purchases we require a target `workspaceId` so
+    // subscription upgrades are applied to a specific workspace and can
+    // be authorized against workspace ownership.
+    if (type === 'subscription') {
+      const workspaceId = (dto as any).workspaceId as string | undefined;
+      if (!workspaceId) {
+        throw new BadRequestException('workspaceId is required for subscription purchases');
+      }
+      const requester = await this.usersRepository.findOne({ where: { id: userId } });
+      if (!requester) {
+        throw new BadRequestException('Workspace-scoped purchases require an authenticated requester');
+      }
+      const membership = await this.workspaceMembershipsRepository.findOne({
+        where: { workspaceId, userId: requester.id, isActive: true },
+      });
+      if (!membership || membership.role !== 'owner') {
+        throw new ForbiddenException('Only workspace owners can apply purchases to a workspace');
+      }
     }
 
-    const planAmount = this.toCycleAmount(
-      PLAN_PRICES_NGN[targetPlan],
-      billingCycle,
-    );
-    const addonsAmount = this.toCycleAmount(
-      this.calculateAddonsAmount(requestedAddons),
-      billingCycle,
-    );
-    const amountNgn = planAmount + addonsAmount;
-    if (amountNgn <= 0)
-      throw new BadRequestException('Invalid checkout amount');
+    try {
+      if (type === 'subscription') {
+        const res = await androidpublisher.purchases.subscriptions.get({
+          packageName: pkg,
+          subscriptionId: productId,
+          token,
+        } as any);
+        // Update our subscription record if verification succeeded
+        const verifiedData = res.data || {};
 
-    const reference =
-      `BRK_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`.toUpperCase();
-    const callbackUrl =
-      process.env.PAYSTACK_CALLBACK_URL ||
-      'https://example.com/paystack/callback';
+        try {
+          const user = await this.usersRepository.findOne({ where: { id: userId } });
+          if (user) {
+            const subscription = await this.findOrCreateSubscription(user!);
+            // map productId to plan if possible
+            const targetPlan = /pro/i.test(productId) ? 'pro' : /basic/i.test(productId) ? 'basic' : subscription.plan;
+            subscription.plan = targetPlan as any;
+            subscription.status = 'active';
+            subscription.currentPeriodStartAt = new Date();
+            if (verifiedData?.expiryTimeMillis) {
+              subscription.currentPeriodEndsAt = new Date(Number(verifiedData.expiryTimeMillis));
+            } else {
+              // fallback to 30 days
+              subscription.currentPeriodEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+            }
+            subscription.lastPaymentReference = token;
+            subscription.metadata = { ...(subscription.metadata || {}), google: verifiedData };
+            await this.subscriptionsRepository.save(subscription);
 
-    const payment = this.paymentsRepository.create({
-      userId,
-      reference,
-      status: 'pending',
-      amount: amountNgn,
-      currency: 'NGN',
-      purchaseType:
-        requestedAddons.workspaceSlots > 0 ||
-        requestedAddons.staffSeats > 0 ||
-        requestedAddons.whatsappBundles > 0
-          ? 'addon_purchase'
-          : 'plan_upgrade',
-      billingCycle,
-      targetPlan,
-      addonWorkspaceSlots: requestedAddons.workspaceSlots,
-      addonStaffSeats: requestedAddons.staffSeats,
-      addonWhatsappBundles: requestedAddons.whatsappBundles,
-      metadata: {
-        userId,
-        targetPlan,
-        billingCycle,
-        addons: requestedAddons,
-      },
-    });
-    await this.paymentsRepository.save(payment);
+            // update user plan + trial state
+            user.plan = subscription.plan;
+            user.trialStatus = 'converted';
+            await this.usersRepository.save(user);
 
-    const initialized = await this.paystackRequest('/transaction/initialize', {
-      method: 'POST',
-      body: JSON.stringify({
-        email: user.email,
-        amount: amountNgn * 100,
-        currency: 'NGN',
-        reference,
-        callback_url: callbackUrl,
-        metadata: {
-          userId,
-          plan: targetPlan,
-          billingCycle,
-          addons: requestedAddons,
-          paymentId: payment.id,
-        },
-      }),
-    });
+            // enqueue email + push
+            const amountText = 'Google Play';
+            const html = this.emailTemplateService.paymentSuccess(
+              user.plan,
+              amountText,
+              token,
+              subscription.currentPeriodEndsAt || undefined,
+            );
+            this.emailQueueService.enqueue({
+              to: user.email,
+              subject: 'Subscription activated - BizRecord',
+              text: `Your subscription was activated via Google Play. Plan: ${user.plan}.`,
+              html,
+            });
+            this.pushService.sendPush({
+              to: user.id,
+              title: 'Subscription active',
+              body: `Your ${user.plan} subscription is active.`,
+              data: { productId, purchaseToken: token },
+            });
+          }
+        } catch (e) {
+          // non-fatal: we verified with Google but failed to update local records
+        }
 
-    return {
-      reference,
-      amount: amountNgn,
-      currency: 'NGN',
-      billingCycle,
-      authUrl: initialized.data?.authorization_url,
-      accessCode: initialized.data?.access_code,
-    };
+        return { verified: true, data: verifiedData };
+      }
+
+      const res = await androidpublisher.purchases.products.get({
+        packageName: pkg,
+        productId,
+        token,
+      } as any);
+
+      // For one-time products, create a minimal payment record and ack
+      const productData = res.data || {};
+      try {
+        const user = await this.usersRepository.findOne({ where: { id: userId } });
+        if (user) {
+          const payment = this.paymentsRepository.create({
+            userId: user.id,
+            reference: token,
+            status: 'success',
+            amount: 0,
+            currency: 'NGN',
+            purchaseType: 'one_time',
+            billingCycle: 'monthly',
+            targetPlan: 'basic',
+            metadata: { google: productData },
+          });
+          await this.paymentsRepository.save(payment);
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      return { verified: true, data: productData };
+    } catch (err: any) {
+      return { verified: false, error: err?.message || err };
+    }
   }
 
-  async verifyPayment(reference: string, userId?: string) {
-    const payment = await this.paymentsRepository.findOne({
-      where: { reference },
-    });
-    if (!payment) throw new NotFoundException('Payment reference not found');
-    if (userId && payment.userId !== userId)
-      throw new ForbiddenException('Payment does not belong to user');
+  /** Handle Google Play RTDN push payload (Pub/Sub delivery). */
+  async handleGoogleWebhook(payload: Record<string, any>) {
+    // The incoming push from Pub/Sub will have a base64 message
+    // In many setups, Google will POST { message: { data: 'base64...' } }
+    try {
+      const msg = payload?.message || payload;
+      const dataB64 = msg?.data;
+      const decoded = dataB64 ? Buffer.from(dataB64, 'base64').toString('utf8') : JSON.stringify(payload);
+      const parsed = JSON.parse(decoded);
 
-    const verified = await this.paystackRequest(
-      `/transaction/verify/${encodeURIComponent(reference)}`,
-    );
-    const status = verified.data?.status;
+      // If this is a subscriptionNotification, attempt to refresh verification
+      if (parsed?.subscriptionNotification) {
+        const note = parsed.subscriptionNotification;
+        const subscriptionId = note?.subscriptionId;
+        const purchaseToken = note?.purchaseToken;
+        const notificationType = note?.notificationType;
 
-    if (status !== 'success') {
-      payment.status = 'failed';
-      payment.rawResponse = verified;
-      await this.paymentsRepository.save(payment);
-      throw new BadRequestException('Payment is not successful');
+        // Attempt a verification pass if package and ids available
+        const pkg = parsed?.packageName || process.env.ANDROID_PACKAGE_NAME || '';
+        if (pkg && subscriptionId && purchaseToken) {
+          await this.verifyGooglePurchase('', { packageName: pkg, productId: subscriptionId, purchaseToken, purchaseType: 'subscription' });
+        }
+
+        // Best-effort: update local subscription state by matching purchase token
+        try {
+          const subscription = await this.subscriptionsRepository.findOne({ where: { lastPaymentReference: purchaseToken } });
+          if (subscription) {
+            // Map common notification types to internal statuses
+            // Google Play notificationType codes: 2=RENEWED,3=CANCELED,4=PURCHASED,12=REVOKED,13=EXPIRED,5=ON_HOLD,6=IN_GRACE_PERIOD
+            if ([2, 4].includes(notificationType)) {
+              subscription.status = 'active';
+            } else if ([3, 12, 13].includes(notificationType)) {
+              subscription.status = notificationType === 13 ? 'expired' : 'cancelled';
+            } else if ([5, 6].includes(notificationType)) {
+              // Map grace/on-hold to active (no separate 'past_due' state in our enum)
+              subscription.status = 'active';
+            }
+
+            await this.subscriptionsRepository.save(subscription);
+
+            // notify user if available
+            try {
+              const user = await this.usersRepository.findOne({ where: { id: subscription.userId } });
+              if (user) {
+                this.pushService.sendPush({
+                  to: user.id,
+                  title: 'Subscription updated',
+                  body: `Your subscription status is now ${subscription.status}.`,
+                  data: { subscriptionId: subscription.id, status: subscription.status },
+                });
+              }
+            } catch (e) {
+              // ignore user notification failures
+            }
+          }
+        } catch (e) {
+          // swallow best-effort errors
+        }
+      }
+
+      return { received: true, parsed };
+    } catch (err: any) {
+      return { received: true, error: err?.message || err };
     }
-
-    await this.applySuccessfulPayment(payment, verified);
-    return {
-      message: 'Payment verified successfully',
-      reference,
-    };
   }
 
   private async applySuccessfulPayment(
@@ -524,48 +459,5 @@ export class BillingService {
       body: `Your payment for plan ${user.plan} was successful.`,
       data: { reference: payment.reference, plan: user.plan },
     });
-  }
-
-  async handleWebhook(payload: Record<string, any>, signature?: string) {
-    const secret =
-      process.env.PAYSTACK_WEBHOOK_SECRET || process.env.PAYSTACK_SECRET_KEY;
-    if (!secret)
-      throw new BadRequestException('Paystack webhook secret not configured');
-
-    const computed = crypto
-      .createHmac('sha512', secret)
-      .update(JSON.stringify(payload))
-      .digest('hex');
-    if (!signature || signature !== computed) {
-      throw new ForbiddenException('Invalid webhook signature');
-    }
-
-    const event = payload?.event;
-    const reference = payload?.data?.reference;
-    if (!reference) {
-      return { received: true, ignored: true };
-    }
-
-    if (event === 'charge.success') {
-      const payment = await this.paymentsRepository.findOne({
-        where: { reference },
-      });
-      if (!payment) return { received: true, ignored: true };
-      await this.applySuccessfulPayment(payment, payload);
-      return { received: true, processed: true };
-    }
-
-    if (event === 'charge.failed') {
-      const payment = await this.paymentsRepository.findOne({
-        where: { reference },
-      });
-      if (payment && payment.status !== 'success') {
-        payment.status = 'failed';
-        payment.rawResponse = payload;
-        await this.paymentsRepository.save(payment);
-      }
-    }
-
-    return { received: true, processed: false };
   }
 }

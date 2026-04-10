@@ -80,6 +80,8 @@ export default function RecordSaleScreen({ navigation, route }) {
 
   const cartItems = route?.params?.cart ?? [];
   const isCartMode = cartItems.length > 0;
+  const [localCart, setLocalCart] = useState(cartItems || []);
+  const isLocalCart = localCart && localCart.length > 0;
   const cartTotal = cartItems.reduce(
     (sum, item) => sum + Number(item.quantity || 0) * Number(item.sellingPrice || 0),
     0,
@@ -325,7 +327,9 @@ export default function RecordSaleScreen({ navigation, route }) {
       type: saleMode === 'debt' ? 'debt' : 'sale',
       itemId: item?.id || null,
       quantity: numericQuantity,
-      unitPrice: numericQuantity > 0 ? Number((total / numericQuantity).toFixed(2)) : 0,
+      // send the original selling price as unitPrice (avoid pre-adjusting it),
+      // backend will compute totals using this and discountAmount.
+      unitPrice: itemPrice,
       totalAmount: total,
       discountAmount: normalizedDiscount,
       paymentMethod:
@@ -337,6 +341,29 @@ export default function RecordSaleScreen({ navigation, route }) {
       dueDate,
       status: saleMode === 'debt' ? 'pending' : 'completed',
       notes: notes.trim() || item?.name || undefined,
+    };
+  };
+
+  const buildMultiItemPayload = (items) => {
+    const lineItems = items.map((it) => ({
+      itemId: it.id,
+      quantity: it.quantity,
+      unitPrice: Number(it.sellingPrice || it.unitPrice || 0),
+      discountAmount: Number(it.discountAmount || 0) || 0,
+    }));
+    const totalAmount = lineItems.reduce((s, li) => s + (li.quantity * li.unitPrice - (li.discountAmount || 0)), 0);
+    return {
+      type: saleMode === 'debt' ? 'debt' : 'sale',
+      lineItems,
+      totalAmount,
+      paymentMethod: PAYMENT_OPTIONS.find((option) => option.id === saleMode)?.paymentMethod || 'cash',
+      customerId: customerId || undefined,
+      customerName: selectedCustomerRecord?.name || undefined,
+      customerEmail: selectedCustomerRecord?.email || undefined,
+      phone: selectedCustomerRecord?.phone || undefined,
+      dueDate,
+      status: saleMode === 'debt' ? 'pending' : 'completed',
+      notes: notes.trim() || undefined,
     };
   };
 
@@ -401,14 +428,30 @@ export default function RecordSaleScreen({ navigation, route }) {
         return;
       }
 
-      await postTransaction(
-        buildTransactionPayload(selectedItem, quantityNumber, discountNumber),
-      );
-      await applyLocalInventoryDelta(selectedItem.id, quantityNumber);
+      if (isLocalCart) {
+        // submit local cart as single transaction
+        const payload = buildMultiItemPayload(localCart);
+        await postTransaction(payload);
+        for (const it of localCart) {
+          await applyLocalInventoryDelta(it.id, it.quantity);
+        }
+      } else {
+        await postTransaction(
+          buildTransactionPayload(selectedItem, quantityNumber, discountNumber),
+        );
+        await applyLocalInventoryDelta(selectedItem.id, quantityNumber);
+      }
+
+      const successMsg = isLocalCart
+        ? `${localCart.length} item(s) total ${formatMoney(localCart.reduce((s, it) => s + Number(it.quantity || 0) * Number(it.sellingPrice || 0), 0))}\nCustomer: ${selectedCustomerRecord?.name || 'Walk-in'}`
+        : `${quantityNumber} x ${selectedItem.name}\nGross: ${formatMoney(grossTotal)}\nDiscount: ${formatMoney(discountNumber)}\nFinal: ${formatMoney(netTotal)}\nCustomer: ${selectedCustomerRecord?.name || 'Walk-in'}`;
+
+      // clear local cart after successful submission
+      if (isLocalCart) setLocalCart([]);
 
       Alert.alert(
         saleMode === 'debt' ? 'Debt sale recorded' : 'Sale recorded',
-        `${quantityNumber} x ${selectedItem.name}\nGross: ${formatMoney(grossTotal)}\nDiscount: ${formatMoney(discountNumber)}\nFinal: ${formatMoney(netTotal)}\nCustomer: ${selectedCustomerRecord?.name || 'Walk-in'}`,
+        successMsg,
         [{ text: 'OK', onPress: () => navigation.goBack() }],
       );
     } catch (err) {
@@ -533,9 +576,7 @@ export default function RecordSaleScreen({ navigation, route }) {
                   </Text>
                 </View>
                 <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>
-                  {formatMoney(
-                    Number(item.quantity || 0) * Number(item.sellingPrice || 0),
-                  )}
+                  {formatMoney(Number(item.quantity || 0) * Number(item.sellingPrice || 0))}
                 </Text>
               </View>
             ))}
@@ -699,6 +740,12 @@ export default function RecordSaleScreen({ navigation, route }) {
                 value={discountAmount}
                 onChangeText={setDiscountAmount}
               />
+              <TouchableOpacity
+                onPress={addToLocalCart}
+                style={{ marginTop: 10, alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 12, backgroundColor: theme.colors.primary, borderRadius: 8 }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700' }}>Add to cart</Text>
+              </TouchableOpacity>
             </View>
 
             {selectedItem ? (
@@ -726,6 +773,29 @@ export default function RecordSaleScreen({ navigation, route }) {
                   </Text>
                 </View>
               </View>
+            ) : null}
+            {isLocalCart ? (
+              <Card style={{ marginTop: 12 }}>
+                <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginBottom: 8 }}>Current cart</Text>
+                {localCart.map((ci, idx) => (
+                  <View key={`${ci.id}-${idx}`} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderTopWidth: idx === 0 ? 0 : 1, borderTopColor: theme.colors.border }}>
+                    <View>
+                      <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>{ci.name}</Text>
+                      <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{ci.quantity} x {formatMoney(ci.sellingPrice || 0)}</Text>
+                    </View>
+                    <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>{formatMoney(Number(ci.quantity || 0) * Number(ci.sellingPrice || 0))}</Text>
+                  </View>
+                ))}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+                  <Text style={{ color: theme.colors.textSecondary, fontWeight: '700' }}>Cart Total</Text>
+                  <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>{formatMoney(localCart.reduce((s, it) => s + Number(it.quantity || 0) * Number(it.sellingPrice || 0), 0))}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', marginTop: 10 }}>
+                  <TouchableOpacity onPress={() => setLocalCart([])} style={{ padding: 10, backgroundColor: theme.colors.card, borderRadius: 8, marginRight: 8 }}>
+                    <Text style={{ color: theme.colors.textSecondary }}>Clear cart</Text>
+                  </TouchableOpacity>
+                </View>
+              </Card>
             ) : null}
           </Card>
         )}

@@ -513,6 +513,56 @@ export class EmailTemplateService {
     return this.getBaseTemplate(content, title, '', options);
   }
 
+  invoiceEmail(transaction: any, receiptUrl: string, options?: Partial<EmailTemplateOptions>) {
+    const config = { ...this.defaultOptions, ...options };
+    const lineItems = (transaction.lineItems || []).map((li: any) => ({
+      name: li.name || li.itemId,
+      quantity: li.quantity,
+      unitPrice: `NGN ${Number(li.unitPrice || 0).toLocaleString()}`,
+      discountAmount: `NGN ${Number(li.discountAmount || 0).toLocaleString()}`,
+      total: `NGN ${Number(li.total || 0).toLocaleString()}`,
+    }));
+
+    const grandTotal = `NGN ${Number(transaction.totalAmount || 0).toLocaleString()}`;
+
+    // Simple templating: inject into the HTML template file if present, otherwise build inline
+    let html = '';
+    try {
+      // load template file relative to this service
+      // NOTE: synchronous read to keep implementation simple
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const fs = require('fs');
+      const path = require('path');
+      const tplPath = path.join(__dirname, 'email-templates', 'invoice.html');
+      let tpl = fs.readFileSync(tplPath, 'utf8');
+      tpl = tpl.replace(/{{receiptUrl}}/g, receiptUrl);
+      const rows = lineItems
+        .map((li: any) => `
+          <tr>
+            <td style="padding:8px;border-bottom:1px solid #eef2ff">${li.name}</td>
+            <td style="padding:8px;border-bottom:1px solid #eef2ff;text-align:right">${li.quantity}</td>
+            <td style="padding:8px;border-bottom:1px solid #eef2ff;text-align:right">${li.unitPrice}</td>
+            <td style="padding:8px;border-bottom:1px solid #eef2ff;text-align:right">${li.discountAmount}</td>
+            <td style="padding:8px;border-bottom:1px solid #eef2ff;text-align:right">${li.total}</td>
+          </tr>`)
+        .join('\n');
+      tpl = tpl.replace(/{{#each lineItems}}[\s\S]*?{{\/each}}/, rows);
+      tpl = tpl.replace(/{{grandTotal}}/g, grandTotal);
+      html = tpl;
+    } catch (e) {
+      // fallback inline HTML
+      html = `
+        <div>
+          <h2>Your Receipt</h2>
+          <p><a href="${receiptUrl}">View receipt</a></p>
+          <p>Grand Total: ${grandTotal}</p>
+        </div>
+      `;
+    }
+
+    return this.getBaseTemplate(html, 'Your Receipt', '', options);
+  }
+
   plainText(htmlContent: string): string {
     // Basic HTML to plain text conversion
     return htmlContent
