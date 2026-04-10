@@ -73,7 +73,7 @@ export class Transaction {
   @Column({ type: 'jsonb', nullable: true })
   lineItems: any[] | null;
 
-  @Column({ name: 'customer_email', nullable: true })
+  @Column({ name: 'customer_email', type: 'varchar', nullable: true })
   customerEmail: string | null;
 
   @ManyToOne(() => Workspace, (workspace) => workspace.transactions, {
