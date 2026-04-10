@@ -55,7 +55,7 @@ export class ArchivePaystackData1712000000000 implements MigrationInterface {
         ${selectExpr('paystack_transaction_id', 'NULL')},
         ${selectExpr('metadata', 'NULL')},
         ${selectExpr('raw_response', 'NULL')},
-        "created_at"
+        ${selectExpr('created_at', 'now()')}
       FROM "payments"
       WHERE ${
         paymentColumns.has('paystack_transaction_id')
