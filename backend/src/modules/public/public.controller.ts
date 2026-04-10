@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Header } from '@nestjs/common';
 
 @Controller()
 export class PublicController {
@@ -43,6 +43,7 @@ export class PublicController {
   }
 
   @Get()
+  @Header('Content-Type', 'text/html; charset=utf-8')
   landing() {
     const body = `
       <section style="margin-top:28px">
@@ -95,6 +96,7 @@ export class PublicController {
   }
 
   @Get('privacy')
+  @Header('Content-Type', 'text/html; charset=utf-8')
   privacy() {
     const body = `
       <section style="margin-top:28px">
@@ -118,6 +120,7 @@ export class PublicController {
   }
 
   @Get('terms')
+  @Header('Content-Type', 'text/html; charset=utf-8')
   terms() {
     const body = `
       <section style="margin-top:28px">
