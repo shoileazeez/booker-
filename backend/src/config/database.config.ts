@@ -30,6 +30,12 @@ function buildSslOption() {
 
 export const databaseConfig = (): TypeOrmModuleOptions => {
   const ssl = buildSslOption();
+  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
+  const shouldSynchronize =
+    process.env.TYPEORM_SYNCHRONIZE === 'true' ||
+    (process.env.TYPEORM_SYNCHRONIZE !== 'false' &&
+      process.env.NODE_ENV !== 'production' &&
+      !hasDatabaseUrl);
   const shared = {
     type: 'postgres' as const,
     entities: [
@@ -48,7 +54,7 @@ export const databaseConfig = (): TypeOrmModuleOptions => {
       Customer,
       UserPushToken,
     ],
-    synchronize: process.env.NODE_ENV !== 'production',
+    synchronize: shouldSynchronize,
     migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
     migrationsRun: true,
     logging: process.env.NODE_ENV === 'development',
