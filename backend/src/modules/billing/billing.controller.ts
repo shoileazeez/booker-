@@ -70,7 +70,15 @@ export class BillingController {
 
   // Google Play RTDN (Pub/Sub push) endpoint — Google will POST notifications here.
   @Post('webhook/google')
-  async googleWebhook(@Body() payload: Record<string, any>) {
-    return this.billingService.handleGoogleWebhook(payload);
+  async googleWebhook(
+    @Body() payload: Record<string, any>,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-google-webhook-secret') googleWebhookSecret?: string,
+    @Headers('x-webhook-secret') webhookSecret?: string,
+  ) {
+    return this.billingService.handleGoogleWebhook(payload, {
+      authorization,
+      sharedSecret: googleWebhookSecret || webhookSecret,
+    });
   }
 }

@@ -1,30 +1,113 @@
-// Lightweight wrapper for Google Play Billing native module.
-// This file provides a simple abstraction that the app can call.
-// In Expo-managed apps you'll need a custom dev client / EAS build
-// with a native billing module installed. For now these methods
-// will throw if the native bridge isn't available.
-import { NativeModules, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import {
+  endConnection,
+  fetchProducts,
+  finishTransaction,
+  getAvailablePurchases,
+  initConnection,
+  requestPurchase,
+} from 'react-native-iap';
 
-const NativeBilling = NativeModules?.GooglePlayBilling || null;
+let connectionPromise = null;
 
 export function isAvailable() {
-  return Platform.OS === 'android' && !!NativeBilling;
+  return Platform.OS === 'android';
+}
+
+async function ensureConnection() {
+  if (!isAvailable()) {
+    throw new Error('Google Play Billing is only available on Android.');
+  }
+
+  if (!connectionPromise) {
+    connectionPromise = initConnection().catch((error) => {
+      connectionPromise = null;
+      throw error;
+    });
+  }
+
+  await connectionPromise;
+}
+
+function unwrapPurchase(result) {
+  if (Array.isArray(result)) {
+    return result[0] || null;
+  }
+
+  if (Array.isArray(result?.purchases)) {
+    return result.purchases[0] || null;
+  }
+
+  if (result?.purchase) {
+    return result.purchase;
+  }
+
+  return result || null;
 }
 
 export async function getSkuDetails(productIds = []) {
-  if (!isAvailable()) throw new Error('Google Play Billing native module not available');
-  return await NativeBilling.getSkuDetails(productIds);
+  await ensureConnection();
+
+  if (!productIds.length) {
+    return [];
+  }
+
+  const response = await fetchProducts({
+    skus: productIds,
+    type: 'subs',
+  });
+
+  return Array.isArray(response) ? response : response?.products || [];
 }
 
 export async function purchaseSubscription(productId) {
-  if (!isAvailable()) throw new Error('Google Play Billing native module not available');
-  // returns { purchaseToken, orderId, productId }
-  return await NativeBilling.purchaseSubscription(productId);
+  await ensureConnection();
+
+  const result = await requestPurchase({
+    request: {
+      google: { skus: [productId] },
+    },
+    type: 'subs',
+  });
+
+  const purchase = unwrapPurchase(result);
+  if (!purchase) {
+    throw new Error('Google Play did not return a purchase record.');
+  }
+
+  return purchase;
 }
 
-export async function acknowledgePurchase(purchaseToken) {
-  if (!isAvailable()) throw new Error('Google Play Billing native module not available');
-  return await NativeBilling.acknowledgePurchase(purchaseToken);
+export async function restorePurchases() {
+  await ensureConnection();
+  const purchases = await getAvailablePurchases();
+  return Array.isArray(purchases) ? purchases : [];
 }
 
-export default { isAvailable, getSkuDetails, purchaseSubscription, acknowledgePurchase };
+export async function acknowledgePurchase(purchase) {
+  await ensureConnection();
+  return finishTransaction({
+    purchase,
+    isConsumable: false,
+  });
+}
+
+export async function disconnect() {
+  if (connectionPromise) {
+    await connectionPromise.catch(() => null);
+    connectionPromise = null;
+  }
+
+  if (isAvailable()) {
+    endConnection();
+  }
+}
+
+export default {
+  acknowledgePurchase,
+  disconnect,
+  getSkuDetails,
+  isAvailable,
+  purchaseSubscription,
+  restorePurchases,
+};
