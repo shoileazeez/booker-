@@ -375,6 +375,9 @@ export class TransactionsService {
     userId: string,
   ) {
     await this.assertTransactionScope(workspaceId, branchId, userId, 'sales.view');
+    if (!isUUID(String(transactionId || ''))) {
+      throw new BadRequestException('Invalid transaction id');
+    }
     const transaction = await this.transactionsRepository.findOne({
       where: branchId
         ? { id: transactionId, workspaceId, branchId }
