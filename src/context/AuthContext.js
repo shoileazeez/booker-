@@ -143,9 +143,6 @@ export const AuthProvider = ({ children }) => {
       const response = await api.post('/auth/login', { email, password });
       const { access_token, user: userData } = response;
       await saveAuth(access_token, userData, password);
-      if (userData.upgradeRequired) {
-        throw new Error('Your free trial has ended. Please upgrade your plan to continue.');
-      }
       return userData;
     } catch (err) {
       if (isLikelyOfflineError(err)) {

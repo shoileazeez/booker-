@@ -16,6 +16,7 @@ import { useWorkspace } from '../../context/WorkspaceContext';
 import { useAuth } from '../../context/AuthContext';
 import { Card, AppButton, Title } from '../../components/UI';
 import { api } from '../../api/client';
+import * as offlineStore from '../../storage/offlineStore';
 import {
   getAndroidPackageName,
   getAddonSkuMap,
@@ -102,6 +103,7 @@ export default function SubscriptionScreen({ navigation }) {
   const [plans, setPlans] = useState(null);
   const [subscription, setSubscription] = useState(null);
   const [usage, setUsage] = useState(null);
+  const [workspaceBilling, setWorkspaceBilling] = useState(null);
   const [playProducts, setPlayProducts] = useState({});
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
@@ -154,18 +156,32 @@ export default function SubscriptionScreen({ navigation }) {
   };
 
   const refreshBilling = async () => {
-    const [plansResp, subResp, usageResp] = await Promise.all([
+    if (!currentWorkspace?.id) {
+      throw new Error('Select a workspace to manage billing.');
+    }
+
+    const workspaceId = currentWorkspace.id;
+    const [plansResp, workspaceCtx] = await Promise.all([
       api.get('/billing/plans'),
-      api.get('/billing/subscription'),
-      api.get('/billing/usage'),
+      api.get(`/billing/workspaces/${workspaceId}/context`),
     ]);
     const normalizedPlans = normalizePlansResponse(plansResp);
     setOnlineRequired(false);
     setPlans(normalizedPlans);
-    setSubscription(subResp);
-    setUsage(usageResp);
-    setSelectedPlan(subResp?.plan || 'pro');
-    setBillingCycle(subResp?.billingCycle || 'monthly');
+    setSubscription(workspaceCtx);
+    setWorkspaceBilling(workspaceCtx);
+    setUsage({
+      whatsappMessagesUsedThisMonth:
+        workspaceCtx?.usage?.whatsappMessagesUsedThisMonth ?? 0,
+      limits: workspaceCtx?.limits || {},
+    });
+    setSelectedPlan(workspaceCtx?.plan || 'pro');
+    setBillingCycle(workspaceCtx?.billingCycle || 'monthly');
+    try {
+      await offlineStore.cacheBillingContext(workspaceId, workspaceCtx);
+    } catch {
+      // ignore cache errors
+    }
     await loadPlayProducts();
   };
 
@@ -240,6 +256,36 @@ export default function SubscriptionScreen({ navigation }) {
       const next = Math.max(0, (prev[key] || 0) + delta);
       return { ...prev, [key]: next };
     });
+  };
+
+  const notifyOwner = async () => {
+    if (!currentWorkspace?.id) return;
+    if (onlineRequired) {
+      Alert.alert(
+        'Internet required',
+        'Connect to the internet to send a renewal reminder to the workspace owner.',
+      );
+      return;
+    }
+
+    try {
+      setProcessing(true);
+      await api.post(
+        `/billing/workspaces/${currentWorkspace.id}/remind-owner`,
+        {},
+      );
+      Alert.alert(
+        'Reminder sent',
+        'We emailed the workspace owner to renew this subscription.',
+      );
+    } catch (err) {
+      Alert.alert(
+        'Unable to send reminder',
+        err?.message || 'Please try again later.',
+      );
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const startCheckout = async () => {

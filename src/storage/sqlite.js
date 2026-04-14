@@ -129,6 +129,12 @@ export async function initDb() {
       PRIMARY KEY (entity_type, local_id)
     );
 
+    CREATE TABLE IF NOT EXISTS local_billing_context (
+      workspace_id TEXT PRIMARY KEY,
+      data TEXT,
+      updated_at_local INTEGER
+    );
+
     -- Indexes for workspace isolation and sync performance
     CREATE INDEX IF NOT EXISTS idx_local_inventory_workspace ON local_inventory(workspace_local_id);
     CREATE INDEX IF NOT EXISTS idx_local_transactions_workspace ON local_transactions(workspace_local_id);

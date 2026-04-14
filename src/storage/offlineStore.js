@@ -108,6 +108,7 @@ export async function cacheWorkspaces(workspaces) {
 
 export async function clearWorkspaceCache() {
   await executeSql('DELETE FROM local_workspaces');
+  await executeSql('DELETE FROM local_billing_context');
 }
 
 export async function clearBranchScopedOfflineData() {
@@ -554,6 +555,36 @@ export async function getCachedCustomers(workspaceId, search) {
     return results;
   } catch {
     return [];
+  }
+}
+
+export async function cacheBillingContext(workspaceId, context) {
+  try {
+    if (!workspaceId || !context) return;
+    const workspaceRef = localWorkspaceId(workspaceId);
+    await executeSql(
+      `INSERT OR REPLACE INTO local_billing_context (workspace_id, data, updated_at_local)
+       VALUES (?, ?, ?)`,
+      [workspaceRef, JSON.stringify(context), Date.now()]
+    );
+  } catch {
+    // ignore
+  }
+}
+
+export async function getCachedBillingContext(workspaceId) {
+  try {
+    if (!workspaceId) return null;
+    const workspaceRef = localWorkspaceId(workspaceId);
+    const rows = await executeSql(
+      'SELECT data, updated_at_local FROM local_billing_context WHERE workspace_id = ? LIMIT 1',
+      [workspaceRef]
+    );
+    if (rows.rows.length === 0) return null;
+    const row = rows.rows.item(0);
+    return parseRowData(row);
+  } catch {
+    return null;
   }
 }
 
