@@ -36,7 +36,8 @@
       "permissions": [
         "com.android.vending.BILLING",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.POST_NOTIFICATIONS"
       ],
       "useNextNotificationFormat": true
     },
