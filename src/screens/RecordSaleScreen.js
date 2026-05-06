@@ -450,6 +450,7 @@ export default function RecordSaleScreen({ navigation, route }) {
 
     setLoading(true);
     try {
+      // If route params has cart, use cart mode validation
       if (isCartMode) {
         for (const item of cartItems) {
           const availableStock = Number(item.quantityAvailable || item.availableQuantity || item.stock || item.currentStock || item.inStock || item.remainingStock || item.quantityOnHand || item.originalQuantity || item.quantity || 0);
@@ -468,6 +469,28 @@ export default function RecordSaleScreen({ navigation, route }) {
         return;
       }
 
+      // If local cart has items, submit as multi-item transaction
+      if (isLocalCart) {
+        const payload = buildMultiItemPayload(localCart);
+        await postTransaction(payload);
+        for (const it of localCart) {
+          await applyLocalInventoryDelta(it.id, it.quantity);
+        }
+
+        const successMsg = `${localCart.length} item(s) total ${formatMoney(localCart.reduce((s, it) => s + Number(it.quantity || 0) * Number(it.sellingPrice || 0), 0))}\nCustomer: ${selectedCustomerRecord?.name || 'Walk-in'}`;
+
+        // clear local cart after successful submission
+        setLocalCart([]);
+
+        Alert.alert(
+          saleMode === 'debt' ? 'Debt sale recorded' : 'Sale recorded',
+          successMsg,
+          [{ text: 'OK', onPress: () => navigation.goBack() }],
+        );
+        return;
+      }
+
+      // Single item validation only needed when not using cart
       if (!selectedItem || !quantity) {
         Alert.alert('Validation Error', 'Please select an item and quantity');
         return;
@@ -500,26 +523,13 @@ export default function RecordSaleScreen({ navigation, route }) {
         return;
       }
 
-      if (isLocalCart) {
-        // submit local cart as single transaction
-        const payload = buildMultiItemPayload(localCart);
-        await postTransaction(payload);
-        for (const it of localCart) {
-          await applyLocalInventoryDelta(it.id, it.quantity);
-        }
-      } else {
-        await postTransaction(
-          buildTransactionPayload(selectedItem, quantityNumber, discountNumber),
-        );
-        await applyLocalInventoryDelta(selectedItem.id, quantityNumber);
-      }
+      // Single item transaction
+      await postTransaction(
+        buildTransactionPayload(selectedItem, quantityNumber, discountNumber),
+      );
+      await applyLocalInventoryDelta(selectedItem.id, quantityNumber);
 
-      const successMsg = isLocalCart
-        ? `${localCart.length} item(s) total ${formatMoney(localCart.reduce((s, it) => s + Number(it.quantity || 0) * Number(it.sellingPrice || 0), 0))}\nCustomer: ${selectedCustomerRecord?.name || 'Walk-in'}`
-        : `${quantityNumber} x ${selectedItem.name}\nGross: ${formatMoney(grossTotal)}\nDiscount: ${formatMoney(discountNumber)}\nFinal: ${formatMoney(netTotal)}\nCustomer: ${selectedCustomerRecord?.name || 'Walk-in'}`;
-
-      // clear local cart after successful submission
-      if (isLocalCart) setLocalCart([]);
+      const successMsg = `${quantityNumber} x ${selectedItem.name}\nGross: ${formatMoney(grossTotal)}\nDiscount: ${formatMoney(discountNumber)}\nFinal: ${formatMoney(netTotal)}\nCustomer: ${selectedCustomerRecord?.name || 'Walk-in'}`;
 
       Alert.alert(
         saleMode === 'debt' ? 'Debt sale recorded' : 'Sale recorded',
@@ -622,12 +632,12 @@ export default function RecordSaleScreen({ navigation, route }) {
             <SkeletonBlock height={70} style={{ marginBottom: 14, borderRadius: 12 }} />
             <SkeletonBlock height={70} style={{ borderRadius: 12 }} />
           </View>
-        ) : isCartMode ? (
+        ) : isCartMode || isLocalCart ? (
           <Card style={{ marginBottom: 16 }}>
             <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginBottom: 12 }}>
               Items in this transaction
             </Text>
-            {cartItems.map((item, index) => (
+            {(isCartMode ? cartItems : localCart).map((item, index) => (
               <View
                 key={item.id || index}
                 style={{
@@ -657,9 +667,25 @@ export default function RecordSaleScreen({ navigation, route }) {
                 Total
               </Text>
               <Text style={{ color: theme.colors.primary, fontWeight: '700', fontSize: 18 }}>
-                {formatMoney(cartTotal)}
+                {formatMoney(
+                  isCartMode
+                    ? cartTotal
+                    : localCart.reduce((s, it) => s + Number(it.quantity || 0) * Number(it.sellingPrice || 0), 0)
+                )}
               </Text>
             </View>
+            {isLocalCart ? (
+              <View style={{ flexDirection: 'row', marginTop: 12, gap: 8 }}>
+                <TouchableOpacity
+                  onPress={() => setLocalCart([])}
+                  style={{ flex: 1, padding: 10, backgroundColor: theme.colors.card, borderRadius: 8 }}
+                >
+                  <Text style={{ color: theme.colors.textSecondary, textAlign: 'center', fontWeight: '600' }}>
+                    Clear cart
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </Card>
         ) : (
           <Card style={{ marginBottom: 16 }}>
@@ -845,29 +871,6 @@ export default function RecordSaleScreen({ navigation, route }) {
                   </Text>
                 </View>
               </View>
-            ) : null}
-            {isLocalCart ? (
-              <Card style={{ marginTop: 12 }}>
-                <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginBottom: 8 }}>Current cart</Text>
-                {localCart.map((ci, idx) => (
-                  <View key={`${ci.id}-${idx}`} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderTopWidth: idx === 0 ? 0 : 1, borderTopColor: theme.colors.border }}>
-                    <View>
-                      <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>{ci.name}</Text>
-                      <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{ci.quantity} x {formatMoney(ci.sellingPrice || 0)}</Text>
-                    </View>
-                    <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>{formatMoney(Number(ci.quantity || 0) * Number(ci.sellingPrice || 0))}</Text>
-                  </View>
-                ))}
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-                  <Text style={{ color: theme.colors.textSecondary, fontWeight: '700' }}>Cart Total</Text>
-                  <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>{formatMoney(localCart.reduce((s, it) => s + Number(it.quantity || 0) * Number(it.sellingPrice || 0), 0))}</Text>
-                </View>
-                <View style={{ flexDirection: 'row', marginTop: 10 }}>
-                  <TouchableOpacity onPress={() => setLocalCart([])} style={{ padding: 10, backgroundColor: theme.colors.card, borderRadius: 8, marginRight: 8 }}>
-                    <Text style={{ color: theme.colors.textSecondary }}>Clear cart</Text>
-                  </TouchableOpacity>
-                </View>
-              </Card>
             ) : null}
           </Card>
         )}

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  View,
   Text,
   TextInput,
   StyleSheet,
@@ -21,17 +20,24 @@ export default function ForgotPasswordScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(false);
+  const [notice, setNotice] = useState('');
 
   const handleSendReset = async () => {
     setError(null);
-    setSuccess(false);
+    setNotice('');
     setLoading(true);
     try {
-      await api.post('/auth/forgot-password', { email: email.trim() });
-      setSuccess(true);
+      const trimmedEmail = email.trim();
+      const response = await api.post('/auth/forgot-password', {
+        email: trimmedEmail,
+      });
+      setNotice(
+        response?.message ||
+          'If an account exists for that email, a 6-digit reset code has been sent.',
+      );
+      navigation.navigate('ResetPassword', { email: trimmedEmail });
     } catch (err) {
-      setError(err?.message || 'Unable to send reset link');
+      setError(err?.message || 'Unable to send reset code');
     } finally {
       setLoading(false);
     }
@@ -42,12 +48,29 @@ export default function ForgotPasswordScreen({ navigation }) {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <Text style={[styles.brand, { color: theme.colors.textPrimary }]}>BizRecord</Text>
-      <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: isCompact ? 20 : 22 }]}>Reset Password</Text>
+      <Text style={[styles.brand, { color: theme.colors.textPrimary }]}>
+        BizRecord
+      </Text>
+      <Text
+        style={[
+          styles.title,
+          { color: theme.colors.textPrimary, fontSize: isCompact ? 20 : 22 },
+        ]}
+      >
+        Reset Password
+      </Text>
       <Card style={{ width: cardWidth }}>
-        <Text style={{ color: theme.colors.textSecondary, marginBottom: 8 }}>Enter your account email</Text>
+        <Text style={{ color: theme.colors.textSecondary, marginBottom: 8 }}>
+          Enter your account email. We will send a 6-digit reset code.
+        </Text>
         <TextInput
-          style={[styles.input, { color: theme.colors.textPrimary, borderColor: theme.colors.border }]}
+          style={[
+            styles.input,
+            {
+              color: theme.colors.textPrimary,
+              borderColor: theme.colors.border,
+            },
+          ]}
           placeholder="you@store.com"
           placeholderTextColor={theme.colors.textSecondary}
           value={email}
@@ -58,24 +81,35 @@ export default function ForgotPasswordScreen({ navigation }) {
           accessibilityLabel="Email address"
           returnKeyType="done"
         />
-        {error ? <Text style={{ color: theme.colors.danger || '#d32f2f', marginTop: 10 }}>{error}</Text> : null}
-        {success ? (
+        {error ? (
+          <Text style={{ color: theme.colors.danger || '#d32f2f', marginTop: 10 }}>
+            {error}
+          </Text>
+        ) : null}
+        {notice ? (
           <Text style={{ color: theme.colors.success || '#388e3c', marginTop: 10 }}>
-            Reset link sent! Check your email.
+            {notice}
           </Text>
         ) : null}
         <AppButton
-          title={loading ? 'Sending…' : 'Send reset link'}
+          title={loading ? 'Sending...' : 'Send reset code'}
           onPress={handleSendReset}
           loading={loading}
           disabled={loading || !email.trim()}
           style={{ marginTop: 16 }}
-          accessibilityLabel="Send reset link"
+          accessibilityLabel="Send reset code"
+        />
+        <AppButton
+          title="I already have a code"
+          onPress={() => navigation.navigate('ResetPassword', { email: email.trim() })}
+          variant="secondary"
+          style={{ marginTop: 10 }}
+          accessibilityLabel="I already have a code"
         />
         <AppButton
           title="Back to login"
           onPress={() => navigation.navigate('Login')}
-          variant="secondary"
+          variant="ghost"
           style={{ marginTop: 10 }}
           accessibilityLabel="Back to login"
         />

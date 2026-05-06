@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  View,
   Text,
   TextInput,
   StyleSheet,
@@ -21,13 +20,16 @@ export default function ResetPasswordScreen({ route, navigation }) {
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const isCompact = width < 380;
   const formWidth = Math.min(width - (isCompact ? 24 : 36), 460);
 
   const handleReset = async () => {
     setError(null);
+    setNotice('');
     setLoading(true);
     try {
       await api.post('/auth/reset-password', {
@@ -35,11 +37,30 @@ export default function ResetPasswordScreen({ route, navigation }) {
         code: code.trim(),
         newPassword,
       });
-      navigation.navigate('Login');
+      navigation.replace('Login');
     } catch (err) {
       setError(err?.message || 'Unable to reset password');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    setError(null);
+    setNotice('');
+    setResending(true);
+    try {
+      const response = await api.post('/auth/forgot-password', {
+        email: email.trim(),
+      });
+      setNotice(
+        response?.message ||
+          'If an account exists for that email, a fresh reset code has been sent.',
+      );
+    } catch (err) {
+      setError(err?.message || 'Unable to resend reset code');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -49,12 +70,24 @@ export default function ResetPasswordScreen({ route, navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Card style={{ width: formWidth }}>
-        <Text style={[styles.title, { color: theme.colors.textPrimary }]}>Reset Password</Text>
-        <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Enter your reset code and new password.</Text>
+        <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
+          Reset Password
+        </Text>
+        <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
+          Enter the 6-digit reset code from your email and choose a new password.
+        </Text>
 
-        <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Email</Text>
+        <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+          Email
+        </Text>
         <TextInput
-          style={[styles.input, { color: theme.colors.textPrimary, borderColor: theme.colors.border }]}
+          style={[
+            styles.input,
+            {
+              color: theme.colors.textPrimary,
+              borderColor: theme.colors.border,
+            },
+          ]}
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
@@ -63,9 +96,17 @@ export default function ResetPasswordScreen({ route, navigation }) {
           accessibilityLabel="Email address"
         />
 
-        <Text style={[styles.label, { color: theme.colors.textSecondary }]}>Reset code</Text>
+        <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+          Reset code
+        </Text>
         <TextInput
-          style={[styles.input, { color: theme.colors.textPrimary, borderColor: theme.colors.border }]}
+          style={[
+            styles.input,
+            {
+              color: theme.colors.textPrimary,
+              borderColor: theme.colors.border,
+            },
+          ]}
           value={code}
           onChangeText={setCode}
           placeholder="123456"
@@ -76,22 +117,43 @@ export default function ResetPasswordScreen({ route, navigation }) {
           accessibilityLabel="Reset code"
         />
 
-        <Text style={[styles.label, { color: theme.colors.textSecondary }]}>New password</Text>
+        <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+          New password
+        </Text>
         <TextInput
-          style={[styles.input, { color: theme.colors.textPrimary, borderColor: theme.colors.border }]}
+          style={[
+            styles.input,
+            {
+              color: theme.colors.textPrimary,
+              borderColor: theme.colors.border,
+            },
+          ]}
           value={newPassword}
           onChangeText={setNewPassword}
-          placeholder="••••••"
+          placeholder="Enter new password"
           placeholderTextColor={theme.colors.textSecondary}
           secureTextEntry
           accessible
           accessibilityLabel="New password"
         />
 
-        {error ? <Text style={{ color: theme.colors.danger || '#d32f2f', marginBottom: 10 }}>{error}</Text> : null}
+        {notice ? (
+          <Text
+            style={{ color: theme.colors.success || '#388e3c', marginBottom: 10 }}
+          >
+            {notice}
+          </Text>
+        ) : null}
+        {error ? (
+          <Text
+            style={{ color: theme.colors.danger || '#d32f2f', marginBottom: 10 }}
+          >
+            {error}
+          </Text>
+        ) : null}
 
         <AppButton
-          title={loading ? 'Resetting…' : 'Reset password'}
+          title={loading ? 'Resetting...' : 'Reset password'}
           onPress={handleReset}
           loading={loading}
           disabled={loading || !email.trim() || !code.trim() || !newPassword}
@@ -99,9 +161,18 @@ export default function ResetPasswordScreen({ route, navigation }) {
           accessibilityLabel="Reset password"
         />
         <AppButton
+          title={resending ? 'Resending...' : 'Resend code'}
+          onPress={handleResendCode}
+          loading={resending}
+          disabled={resending || !email.trim()}
+          variant="secondary"
+          style={{ marginTop: 10 }}
+          accessibilityLabel="Resend code"
+        />
+        <AppButton
           title="Back to login"
           onPress={() => navigation.navigate('Login')}
-          variant="secondary"
+          variant="ghost"
           style={{ marginTop: 10 }}
           accessibilityLabel="Back to login"
         />

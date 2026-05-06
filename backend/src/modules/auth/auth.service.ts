@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -14,7 +15,7 @@ import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
-import { EmailQueueService } from '../notifications/email-queue.service';
+import { EmailService } from '../notifications/email.service';
 import { EmailTemplateService } from '../notifications/email-template.service';
 
 @Injectable()
@@ -23,12 +24,27 @@ export class AuthService {
     @InjectRepository(User)
     private usersRepository: Repository<User>,
     private jwtService: JwtService,
-    private emailQueueService: EmailQueueService,
+    private emailService: EmailService,
     private readonly emailTemplateService: EmailTemplateService,
   ) {}
 
   private generateSixDigitCode() {
     return `${Math.floor(100000 + Math.random() * 900000)}`;
+  }
+
+  private async sendAuthEmail(input: {
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+  }) {
+    try {
+      await this.emailService.sendEmail(input);
+    } catch {
+      throw new InternalServerErrorException(
+        'Unable to send email right now. Please try again shortly.',
+      );
+    }
   }
 
   private async sendVerificationEmail(user: User) {
@@ -38,7 +54,7 @@ export class AuthService {
       user.emailVerificationCode,
     );
 
-    this.emailQueueService.enqueue({
+    await this.sendAuthEmail({
       to: user.email,
       subject: 'Verify your BizRecord account',
       text: `Your BizRecord verification code is ${user.emailVerificationCode}. It expires in 10 minutes. If you did not request this, please ignore this email.`,
@@ -51,7 +67,7 @@ export class AuthService {
 
     const html = this.emailTemplateService.passwordReset(user.passwordResetCode);
 
-    this.emailQueueService.enqueue({
+    await this.sendAuthEmail({
       to: user.email,
       subject: 'BizRecord password reset code',
       text: `Your BizRecord password reset code is ${user.passwordResetCode}. It expires in 10 minutes. If you did not request this, please secure your account immediately.`,
