@@ -9,7 +9,23 @@ export type PushNotificationInput = {
   to: string; // device token or user id
   title: string;
   body: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
+};
+
+type ExpoPushMessage = {
+  to: string;
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+  channelId: string;
+  sound: 'default';
+  priority: 'high';
+  ttl: number;
+};
+
+type ExpoPushResult = {
+  status?: string;
+  details?: { error?: string };
 };
 
 @Injectable()
@@ -79,7 +95,7 @@ export class PushService {
       .filter((token) => this.isExpoPushToken(token));
   }
 
-  private async sendWithExpo(messages: Array<Record<string, any>>) {
+  private async sendWithExpo(messages: ExpoPushMessage[]) {
     const endpoint =
       this.configService.get<string>('EXPO_PUSH_API_URL') ||
       'https://exp.host/--/api/v2/push/send';
@@ -95,14 +111,20 @@ export class PushService {
         body: JSON.stringify(batch),
       });
 
-      const payload = await response.json().catch(() => null);
+      const payloadUnknown: unknown = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error(
-          `Expo push request failed (${response.status}): ${JSON.stringify(payload)}`,
+          `Expo push request failed (${response.status}): ${JSON.stringify(payloadUnknown)}`,
         );
       }
 
-      const results = Array.isArray(payload?.data) ? payload.data : [];
+      const payload =
+        payloadUnknown && typeof payloadUnknown === 'object'
+          ? (payloadUnknown as { data?: unknown })
+          : null;
+      const results: ExpoPushResult[] = Array.isArray(payload?.data)
+        ? (payload.data as ExpoPushResult[])
+        : [];
       for (let idx = 0; idx < results.length; idx += 1) {
         const result = results[idx];
         const token = batch[idx]?.to;

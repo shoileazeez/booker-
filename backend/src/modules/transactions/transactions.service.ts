@@ -535,11 +535,24 @@ export class TransactionsService {
         );
       }
 
-      const lineTotalBefore = Number(targetLine?.total || 0);
+      const lineUnitPrice = Number(targetLine?.unitPrice || 0);
+      const lineDiscountAmount = Math.max(
+        0,
+        Number(targetLine?.discountAmount || 0),
+      );
+      const inferredLineTotal = Math.max(
+        0,
+        lineUnitPrice * lineQtyBefore - lineDiscountAmount,
+      );
+      const lineTotalBefore = Number(
+        Number(targetLine?.total || 0) > 0
+          ? targetLine?.total
+          : inferredLineTotal,
+      );
       const lineUnitNet =
         lineQtyBefore > 0
           ? lineTotalBefore / lineQtyBefore
-          : Number(targetLine?.unitPrice || 0);
+          : Math.max(0, lineUnitPrice);
       const lineQtyAfter = Number((lineQtyBefore - returnQuantity).toFixed(2));
       const lineTotalAfter = Number(
         (lineTotalBefore - lineUnitNet * returnQuantity).toFixed(2),

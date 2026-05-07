@@ -37,8 +37,9 @@ export class DebtReminderService implements OnModuleInit, OnModuleDestroy {
         60 * 60 * 1000,
     );
     this.timer = setInterval(() => {
-      this.sendDueDebtEmails().catch((err) => {
-        this.logger.error(`Debt reminder run failed: ${err?.message || err}`);
+      this.sendDueDebtEmails().catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Debt reminder run failed: ${message}`);
       });
     }, intervalMs);
 
