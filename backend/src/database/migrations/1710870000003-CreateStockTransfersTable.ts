@@ -42,9 +42,15 @@ export class CreateStockTransfersTable1710870000002 implements MigrationInterfac
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_stock_transfers_destination_branch_id"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_stock_transfers_source_branch_id"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_stock_transfers_workspace_id"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_stock_transfers_destination_branch_id"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_stock_transfers_source_branch_id"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_stock_transfers_workspace_id"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "stock_transfers"`);
   }
 }

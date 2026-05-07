@@ -26,8 +26,10 @@ export class AddMissingColumnsToTransactions1710870000008 implements MigrationIn
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_transactions_branch_id"`);
-    
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_transactions_branch_id"`,
+    );
+
     await queryRunner.query(`
       ALTER TABLE "transactions"
       DROP CONSTRAINT IF EXISTS "FK_transactions_branch"

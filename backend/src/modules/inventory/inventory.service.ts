@@ -344,10 +344,15 @@ export class InventoryService {
     userId: string,
     dto: CreateStockTransferDto,
   ) {
-    await this.branchAccessService.assertWorkspaceOwnerLike(workspaceId, userId);
+    await this.branchAccessService.assertWorkspaceOwnerLike(
+      workspaceId,
+      userId,
+    );
 
     if (dto.sourceBranchId === dto.destinationBranchId) {
-      throw new NotFoundException('Source and destination branches must differ');
+      throw new NotFoundException(
+        'Source and destination branches must differ',
+      );
     }
 
     const sourceItem = await this.itemsRepository.findOne({
@@ -363,7 +368,9 @@ export class InventoryService {
 
     const quantity = Number(dto.quantity || 0);
     if (!quantity || quantity <= 0) {
-      throw new NotFoundException('Transfer quantity must be greater than zero');
+      throw new NotFoundException(
+        'Transfer quantity must be greater than zero',
+      );
     }
 
     const currentSourceQuantity = Number(sourceItem.quantity || 0);
@@ -453,11 +460,20 @@ export class InventoryService {
   }
 
   async getStockTransfers(workspaceId: string, userId: string) {
-    await this.branchAccessService.assertWorkspaceOwnerLike(workspaceId, userId);
+    await this.branchAccessService.assertWorkspaceOwnerLike(
+      workspaceId,
+      userId,
+    );
     return this.stockTransfersRepository.find({
       where: { workspaceId },
       order: { createdAt: 'DESC' },
-      relations: ['sourceBranch', 'destinationBranch', 'sourceItem', 'destinationItem', 'createdBy'],
+      relations: [
+        'sourceBranch',
+        'destinationBranch',
+        'sourceItem',
+        'destinationItem',
+        'createdBy',
+      ],
       take: 200,
     });
   }

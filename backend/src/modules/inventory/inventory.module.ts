@@ -17,7 +17,14 @@ import { StockTransfer } from './entities/stock-transfer.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([InventoryItem, Workspace, User, Transaction, Branch, StockTransfer]),
+    TypeOrmModule.forFeature([
+      InventoryItem,
+      Workspace,
+      User,
+      Transaction,
+      Branch,
+      StockTransfer,
+    ]),
     NotificationsModule,
     WorkspaceModule,
   ],

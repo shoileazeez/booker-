@@ -118,7 +118,12 @@ export class WorkspaceCustomerController {
     @Request() req,
     @Query('search') search?: string,
   ) {
-    return this.customerService.findAll(workspaceId, null, req.user.sub, search);
+    return this.customerService.findAll(
+      workspaceId,
+      null,
+      req.user.sub,
+      search,
+    );
   }
 
   @Get(':id')
@@ -137,7 +142,13 @@ export class WorkspaceCustomerController {
     @Body() dto: UpdateCustomerDto,
     @Request() req,
   ) {
-    return this.customerService.update(workspaceId, null, id, req.user.sub, dto);
+    return this.customerService.update(
+      workspaceId,
+      null,
+      id,
+      req.user.sub,
+      dto,
+    );
   }
 
   @Delete(':id')

@@ -19,7 +19,10 @@ import {
 
 type BranchRole = 'manager' | 'staff';
 
-const DEFAULT_BRANCH_ROLE_PERMISSIONS: Record<BranchRole, BranchPermissionKey[]> = {
+const DEFAULT_BRANCH_ROLE_PERMISSIONS: Record<
+  BranchRole,
+  BranchPermissionKey[]
+> = {
   manager: [
     'inventory.view',
     'inventory.manage',
@@ -199,7 +202,10 @@ export class BranchAccessService {
     return this.getEffectivePermissions(branchMembership).includes(permission);
   }
 
-  async deactivateBranchMemberships(branchId: string, exceptUserIds: string[] = []) {
+  async deactivateBranchMemberships(
+    branchId: string,
+    exceptUserIds: string[] = [],
+  ) {
     const memberships = await this.branchMembershipsRepository.find({
       where: { branchId, isActive: true },
     });
@@ -247,9 +253,7 @@ export class BranchAccessService {
     }
 
     if (!branchMembership?.isActive) {
-      throw new ForbiddenException(
-        'You are not assigned to this branch',
-      );
+      throw new ForbiddenException('You are not assigned to this branch');
     }
 
     if (options?.minimumRole === 'manager' && branchRole !== 'manager') {
@@ -267,9 +271,14 @@ export class BranchAccessService {
     userId: string,
     permission: BranchPermissionKey,
   ) {
-    const access = await this.assertBranchAccess(workspaceId, branchId, userId, {
-      minimumRole: 'staff',
-    });
+    const access = await this.assertBranchAccess(
+      workspaceId,
+      branchId,
+      userId,
+      {
+        minimumRole: 'staff',
+      },
+    );
 
     if (access.ownerLike) {
       return access;

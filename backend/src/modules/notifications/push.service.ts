@@ -39,7 +39,8 @@ export class PushService {
       where: { userId, token: dto.token },
     });
 
-    const record = existing || this.pushTokenRepository.create({ userId, token: dto.token });
+    const record =
+      existing || this.pushTokenRepository.create({ userId, token: dto.token });
     record.platform = dto.platform || null;
     record.deviceId = dto.deviceId || null;
     record.isActive = true;
@@ -73,7 +74,9 @@ export class PushService {
     const rows = await this.pushTokenRepository.find({
       where: { userId: target, isActive: true },
     });
-    return rows.map((row) => row.token).filter((token) => this.isExpoPushToken(token));
+    return rows
+      .map((row) => row.token)
+      .filter((token) => this.isExpoPushToken(token));
   }
 
   private async sendWithExpo(messages: Array<Record<string, any>>) {
@@ -133,15 +136,18 @@ export class PushService {
       return;
     }
 
-    const provider =
-      (this.configService.get<string>('PUSH_PROVIDER') || 'expo').toLowerCase();
+    const provider = (
+      this.configService.get<string>('PUSH_PROVIDER') || 'expo'
+    ).toLowerCase();
     const messages = tokens.map((token) => ({
       to: token,
       title: input.title,
       body: input.body,
       data: input.data || {},
+      channelId: 'default',
       sound: 'default',
       priority: 'high',
+      ttl: 60 * 60,
     }));
 
     if (provider !== 'expo') {
@@ -152,6 +158,8 @@ export class PushService {
     }
 
     await this.sendWithExpo(messages);
-    this.logger.log(`Push notification dispatched to ${tokens.length} device(s)`);
+    this.logger.log(
+      `Push notification dispatched to ${tokens.length} device(s)`,
+    );
   }
 }

@@ -32,8 +32,12 @@ export class CreateAuditLogsTable1710870000001 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_audit_logs_actor_user_id"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_audit_logs_workspace_id"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_audit_logs_actor_user_id"`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_audit_logs_workspace_id"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "audit_logs"`);
   }
 }

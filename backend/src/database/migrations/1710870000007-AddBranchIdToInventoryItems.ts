@@ -21,8 +21,10 @@ export class AddBranchIdToInventoryItems1710870000006 implements MigrationInterf
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_inventory_items_branch_id"`);
-    
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_inventory_items_branch_id"`,
+    );
+
     await queryRunner.query(`
       ALTER TABLE "inventory_items"
       DROP CONSTRAINT IF EXISTS "FK_inventory_items_branch"

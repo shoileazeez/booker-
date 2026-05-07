@@ -65,7 +65,9 @@ export class AuthService {
   private async sendResetEmail(user: User) {
     if (!user.passwordResetCode) return;
 
-    const html = this.emailTemplateService.passwordReset(user.passwordResetCode);
+    const html = this.emailTemplateService.passwordReset(
+      user.passwordResetCode,
+    );
 
     await this.sendAuthEmail({
       to: user.email,

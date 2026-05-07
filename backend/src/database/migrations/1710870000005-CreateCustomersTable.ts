@@ -37,7 +37,9 @@ export class CreateCustomersTable1710870000004 implements MigrationInterface {
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_customers_email"`);
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_customers_branch_id"`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_customers_workspace_id"`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "IDX_customers_workspace_id"`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "customers"`);
   }
 }

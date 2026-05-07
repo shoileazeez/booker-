@@ -195,6 +195,11 @@ export class WorkspaceInventoryController {
     @Param('id') id: string,
     @Request() req,
   ) {
-    return this.inventoryService.deleteItem(workspaceId, null, id, req.user.sub);
+    return this.inventoryService.deleteItem(
+      workspaceId,
+      null,
+      id,
+      req.user.sub,
+    );
   }
 }

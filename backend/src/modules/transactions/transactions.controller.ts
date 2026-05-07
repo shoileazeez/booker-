@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { TransactionsService } from './transactions.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { ReturnDebtDto } from './dto/return-debt.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('workspaces/:workspaceId/branches/:branchId/transactions')
@@ -100,6 +101,23 @@ export class TransactionsController {
       req.user.sub,
     );
   }
+
+  @Post(':id/debt-return')
+  async returnDebt(
+    @Param('workspaceId') workspaceId: string,
+    @Param('branchId') branchId: string,
+    @Param('id') id: string,
+    @Body() body: ReturnDebtDto,
+    @Request() req,
+  ) {
+    return this.transactionsService.returnDebtTransaction(
+      workspaceId,
+      branchId || null,
+      id,
+      body,
+      req.user.sub,
+    );
+  }
 }
 
 @Controller('workspaces/:workspaceId/transactions')
@@ -161,7 +179,12 @@ export class WorkspaceTransactionsController {
     @Param('id') id: string,
     @Request() req,
   ) {
-    return this.transactionsService.getTransaction(workspaceId, null, id, req.user.sub);
+    return this.transactionsService.getTransaction(
+      workspaceId,
+      null,
+      id,
+      req.user.sub,
+    );
   }
 
   @Put(':id/status')
@@ -176,6 +199,22 @@ export class WorkspaceTransactionsController {
       null,
       id,
       body.status,
+      req.user.sub,
+    );
+  }
+
+  @Post(':id/debt-return')
+  async returnDebt(
+    @Param('workspaceId') workspaceId: string,
+    @Param('id') id: string,
+    @Body() body: ReturnDebtDto,
+    @Request() req,
+  ) {
+    return this.transactionsService.returnDebtTransaction(
+      workspaceId,
+      null,
+      id,
+      body,
       req.user.sub,
     );
   }

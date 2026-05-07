@@ -33,7 +33,11 @@ export class Subscription {
   @Column({ type: 'timestamp', nullable: true, name: 'trial_ends_at' })
   trialEndsAt: Date | null;
 
-  @Column({ type: 'timestamp', nullable: true, name: 'current_period_start_at' })
+  @Column({
+    type: 'timestamp',
+    nullable: true,
+    name: 'current_period_start_at',
+  })
   currentPeriodStartAt: Date | null;
 
   @Column({ type: 'timestamp', nullable: true, name: 'current_period_ends_at' })
@@ -51,13 +55,21 @@ export class Subscription {
   @Column({ default: 0, name: 'whatsapp_messages_used_this_month' })
   whatsappMessagesUsedThisMonth: number;
 
-  @Column({ type: 'timestamp', nullable: true, name: 'whatsapp_usage_reset_at' })
+  @Column({
+    type: 'timestamp',
+    nullable: true,
+    name: 'whatsapp_usage_reset_at',
+  })
   whatsappUsageResetAt: Date | null;
 
   @Column({ type: 'varchar', nullable: true, name: 'paystack_customer_code' })
   paystackCustomerCode: string | null;
 
-  @Column({ type: 'varchar', nullable: true, name: 'paystack_subscription_code' })
+  @Column({
+    type: 'varchar',
+    nullable: true,
+    name: 'paystack_subscription_code',
+  })
   paystackSubscriptionCode: string | null;
 
   @Column({ type: 'varchar', nullable: true, name: 'last_payment_reference' })

@@ -10,17 +10,24 @@ import { Workspace } from '../workspace/entities/workspace.entity';
 import { User } from '../auth/entities/user.entity';
 import { InventoryItem } from '../inventory/entities/inventory-item.entity';
 import { ReceiptService } from './receipt.service';
+import { DebtReminderService } from './debt-reminder.service';
 import { WorkspaceModule } from '../workspace/workspace.module';
 import { Branch } from '../workspace/entities/branch.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Transaction, Workspace, User, InventoryItem, Branch]),
+    TypeOrmModule.forFeature([
+      Transaction,
+      Workspace,
+      User,
+      InventoryItem,
+      Branch,
+    ]),
     WorkspaceModule,
     NotificationsModule,
   ],
-  providers: [TransactionsService, ReceiptService],
+  providers: [TransactionsService, ReceiptService, DebtReminderService],
   controllers: [TransactionsController, WorkspaceTransactionsController],
   exports: [TransactionsService],
 })

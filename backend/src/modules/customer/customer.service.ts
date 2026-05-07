@@ -41,10 +41,11 @@ export class CustomerService {
       };
     }
 
-    const { workspace } = await this.branchAccessService.assertWorkspaceOwnerLike(
-      workspaceId,
-      userId,
-    );
+    const { workspace } =
+      await this.branchAccessService.assertWorkspaceOwnerLike(
+        workspaceId,
+        userId,
+      );
     return {
       workspace,
       branch: null,
@@ -89,7 +90,12 @@ export class CustomerService {
     userId: string,
     search?: string,
   ) {
-    await this.assertCustomerScope(workspaceId, branchId, userId, 'customers.view');
+    await this.assertCustomerScope(
+      workspaceId,
+      branchId,
+      userId,
+      'customers.view',
+    );
     const qb = this.customerRepository
       .createQueryBuilder('customer')
       .where('customer.workspace_id = :workspaceId', { workspaceId });
@@ -113,7 +119,12 @@ export class CustomerService {
     id: string,
     userId: string,
   ) {
-    await this.assertCustomerScope(workspaceId, branchId, userId, 'customers.view');
+    await this.assertCustomerScope(
+      workspaceId,
+      branchId,
+      userId,
+      'customers.view',
+    );
     return this.customerRepository.findOne({
       where: branchId
         ? { id, workspaceId, branchId }

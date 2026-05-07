@@ -146,7 +146,8 @@ export class BillingService {
       where: { userId },
     });
 
-    const plan: PlanKey = (subscription?.plan as PlanKey) === 'pro' ? 'pro' : 'basic';
+    const plan: PlanKey =
+      (subscription?.plan as PlanKey) === 'pro' ? 'pro' : 'basic';
     const limits = this.computeLimits(plan, {
       workspaceSlots: subscription?.addonWorkspaceSlots || 0,
       staffSeats: subscription?.addonStaffSeats || 0,
@@ -190,7 +191,10 @@ export class BillingService {
   }
 
   private async findOrCreateSubscription(user: User) {
-    return this.findOrCreateSubscriptionRecord(this.subscriptionsRepository, user);
+    return this.findOrCreateSubscriptionRecord(
+      this.subscriptionsRepository,
+      user,
+    );
   }
 
   private resolveTrialState(user: User) {
@@ -309,7 +313,9 @@ export class BillingService {
     let payment = await this.getPaymentByReference(params.reference);
 
     if (payment && payment.userId !== params.userId) {
-      throw new ForbiddenException('Purchase token already belongs to another user');
+      throw new ForbiddenException(
+        'Purchase token already belongs to another user',
+      );
     }
 
     const isFirstSuccess = !payment || payment.status !== 'success';
@@ -354,7 +360,9 @@ export class BillingService {
     return cycle === 'yearly' ? 'yearly' : 'monthly';
   }
 
-  async getWorkspaceBillingContext(workspaceId: string): Promise<WorkspaceBillingContext> {
+  async getWorkspaceBillingContext(
+    workspaceId: string,
+  ): Promise<WorkspaceBillingContext> {
     const workspace = await this.workspacesRepository.findOne({
       where: { id: workspaceId },
       relations: ['createdBy'],
@@ -374,7 +382,9 @@ export class BillingService {
     });
 
     const plan = this.toPlanKey(subscription?.plan || owner.plan);
-    const billingCycle = this.toBillingCycle(subscription?.billingCycle || 'monthly');
+    const billingCycle = this.toBillingCycle(
+      subscription?.billingCycle || 'monthly',
+    );
     const status = subscription?.status || 'inactive';
     const isActive = status === 'active' || status === 'trialing';
 
@@ -494,7 +504,9 @@ export class BillingService {
       });
 
       if (payment?.userId && payment.userId !== params.userId) {
-        throw new ForbiddenException('Purchase token already belongs to another user');
+        throw new ForbiddenException(
+          'Purchase token already belongs to another user',
+        );
       }
 
       if (payment?.status === 'success') {
@@ -504,7 +516,9 @@ export class BillingService {
         return existingSubscription;
       }
 
-      const user = await usersRepository.findOne({ where: { id: params.userId } });
+      const user = await usersRepository.findOne({
+        where: { id: params.userId },
+      });
       if (!user) {
         throw new NotFoundException('User not found');
       }
@@ -549,7 +563,8 @@ export class BillingService {
       }
 
       if (params.purchaseKind === 'addon_workspace_slot') {
-        subscription.addonWorkspaceSlots = (subscription.addonWorkspaceSlots || 0) + 1;
+        subscription.addonWorkspaceSlots =
+          (subscription.addonWorkspaceSlots || 0) + 1;
       } else if (params.purchaseKind === 'addon_staff_seat') {
         subscription.addonStaffSeats = (subscription.addonStaffSeats || 0) + 1;
       } else if (params.purchaseKind === 'addon_whatsapp_bundle_100') {
@@ -676,7 +691,10 @@ export class BillingService {
     verifiedData: Record<string, any>,
     productId: string,
   ) {
-    const lineItem = this.getGoogleSubscriptionLineItem(verifiedData, productId);
+    const lineItem = this.getGoogleSubscriptionLineItem(
+      verifiedData,
+      productId,
+    );
     return !!lineItem && lineItem.productId === productId;
   }
 
@@ -741,19 +759,24 @@ export class BillingService {
     }
 
     const subscription = await this.findOrCreateSubscription(user);
-    subscription.plan = this.inferPlanFromProductId(productId, subscription.plan);
+    subscription.plan = this.inferPlanFromProductId(
+      productId,
+      subscription.plan,
+    );
     subscription.billingCycle = this.inferBillingCycleFromProductId(
       productId,
       subscription.billingCycle || 'monthly',
     );
-    const lineItem = this.getGoogleSubscriptionLineItem(verifiedData, productId);
+    const lineItem = this.getGoogleSubscriptionLineItem(
+      verifiedData,
+      productId,
+    );
     const expiryDate =
       this.getGoogleSubscriptionExpiryDate(verifiedData, productId) ||
       subscription.currentPeriodEndsAt ||
       new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    const hasPendingAcknowledgement = !this.isAcknowledgedGoogleSubscription(
-      verifiedData,
-    );
+    const hasPendingAcknowledgement =
+      !this.isAcknowledgedGoogleSubscription(verifiedData);
     const activeStatusFromPlay = this.isActiveGoogleSubscription(verifiedData);
     const offerTags = Array.isArray(lineItem?.offerDetails?.offerTags)
       ? lineItem.offerDetails.offerTags
@@ -794,7 +817,9 @@ export class BillingService {
         ...((subscription.metadata as any)?.google || {}),
         ...verifiedData,
         linkedPurchaseToken:
-          options?.linkedPurchaseToken || verifiedData?.linkedPurchaseToken || null,
+          options?.linkedPurchaseToken ||
+          verifiedData?.linkedPurchaseToken ||
+          null,
         notificationType: options?.notificationType ?? null,
         productId,
         purchaseToken,
@@ -812,7 +837,9 @@ export class BillingService {
       metadata: this.buildGooglePaymentMetadata(verifiedData, {
         productId,
         linkedPurchaseToken:
-          options?.linkedPurchaseToken || verifiedData?.linkedPurchaseToken || null,
+          options?.linkedPurchaseToken ||
+          verifiedData?.linkedPurchaseToken ||
+          null,
       }),
       rawResponse: verifiedData,
     });
@@ -990,7 +1017,8 @@ export class BillingService {
     const purchaseKind =
       dto.purchaseKind || this.inferPurchaseKindFromProductId(productId);
     const requestedBillingCycle =
-      dto.billingCycle || this.inferBillingCycleFromProductId(productId, 'monthly');
+      dto.billingCycle ||
+      this.inferBillingCycleFromProductId(productId, 'monthly');
 
     if (type === 'subscription' || purchaseKind !== 'plan') {
       const workspaceId = dto.workspaceId;
@@ -1023,7 +1051,9 @@ export class BillingService {
           pkg,
           token,
         );
-        if (!this.isMatchingGoogleSubscriptionProduct(verifiedData, productId)) {
+        if (
+          !this.isMatchingGoogleSubscriptionProduct(verifiedData, productId)
+        ) {
           throw new BadRequestException(
             'Google Play subscription product does not match the requested productId',
           );
@@ -1075,7 +1105,9 @@ export class BillingService {
         productData.acknowledgementState = 1;
       }
       if (purchaseKind === 'plan') {
-        const user = await this.usersRepository.findOne({ where: { id: userId } });
+        const user = await this.usersRepository.findOne({
+          where: { id: userId },
+        });
         if (user) {
           await this.recordVerifiedGooglePayment({
             userId: user.id,
@@ -1156,18 +1188,13 @@ export class BillingService {
     const decoded = dataB64
       ? Buffer.from(dataB64, 'base64').toString('utf8')
       : JSON.stringify(payload);
-    
+
     let parsed;
     try {
       parsed = JSON.parse(decoded);
     } catch (err) {
-      console.error(
-        `Failed to parse webhook JSON: ${err.message}`,
-        decoded,
-      );
-      throw new BadRequestException(
-        'Invalid webhook payload: malformed JSON',
-      );
+      console.error(`Failed to parse webhook JSON: ${err.message}`, decoded);
+      throw new BadRequestException('Invalid webhook payload: malformed JSON');
     }
 
     if (parsed?.testNotification) {

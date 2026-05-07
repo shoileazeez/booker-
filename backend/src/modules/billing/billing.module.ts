@@ -11,7 +11,13 @@ import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Workspace, Subscription, Payment, WorkspaceMembership]),
+    TypeOrmModule.forFeature([
+      User,
+      Workspace,
+      Subscription,
+      Payment,
+      WorkspaceMembership,
+    ]),
     NotificationsModule,
   ],
   controllers: [BillingController],

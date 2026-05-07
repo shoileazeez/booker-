@@ -94,7 +94,9 @@ export class ArchivePaystackData1712000000000 implements MigrationInterface {
     }
 
     // Optionally add a comment to indicate archival ran
-    await queryRunner.query(`COMMENT ON TABLE "payments_archive" IS 'Archive of payments previously associated with Paystack. Created by migration ArchivePaystackData1712000000000';`);
+    await queryRunner.query(
+      `COMMENT ON TABLE "payments_archive" IS 'Archive of payments previously associated with Paystack. Created by migration ArchivePaystackData1712000000000';`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

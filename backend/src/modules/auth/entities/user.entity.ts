@@ -51,19 +51,35 @@ export class User {
   @Column({ type: 'varchar', nullable: true, name: 'email_verification_code' })
   emailVerificationCode: string | null;
 
-  @Column({ type: 'timestamp', nullable: true, name: 'email_verification_expires_at' })
+  @Column({
+    type: 'timestamp',
+    nullable: true,
+    name: 'email_verification_expires_at',
+  })
   emailVerificationExpiresAt: Date | null;
 
-  @Column({ type: 'timestamp', nullable: true, name: 'email_verification_last_sent_at' })
+  @Column({
+    type: 'timestamp',
+    nullable: true,
+    name: 'email_verification_last_sent_at',
+  })
   emailVerificationLastSentAt: Date | null;
 
   @Column({ type: 'varchar', nullable: true, name: 'password_reset_code' })
   passwordResetCode: string | null;
 
-  @Column({ type: 'timestamp', nullable: true, name: 'password_reset_expires_at' })
+  @Column({
+    type: 'timestamp',
+    nullable: true,
+    name: 'password_reset_expires_at',
+  })
   passwordResetExpiresAt: Date | null;
 
-  @Column({ type: 'timestamp', nullable: true, name: 'password_reset_last_sent_at' })
+  @Column({
+    type: 'timestamp',
+    nullable: true,
+    name: 'password_reset_last_sent_at',
+  })
   passwordResetLastSentAt: Date | null;
 
   @OneToMany(() => WorkspaceMembership, (membership) => membership.user)

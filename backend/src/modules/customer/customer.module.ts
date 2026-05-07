@@ -11,7 +11,10 @@ import { Branch } from '../workspace/entities/branch.entity';
 import { WorkspaceModule } from '../workspace/workspace.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Customer, Workspace, Branch]), WorkspaceModule],
+  imports: [
+    TypeOrmModule.forFeature([Customer, Workspace, Branch]),
+    WorkspaceModule,
+  ],
   providers: [CustomerService],
   controllers: [CustomerController, WorkspaceCustomerController],
   exports: [CustomerService],

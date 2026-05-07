@@ -26,7 +26,10 @@ export class StockTransferController {
   }
 
   @Get()
-  async getTransfers(@Param('workspaceId') workspaceId: string, @Request() req) {
+  async getTransfers(
+    @Param('workspaceId') workspaceId: string,
+    @Request() req,
+  ) {
     return this.inventoryService.getStockTransfers(workspaceId, req.user.sub);
   }
 }

@@ -254,10 +254,7 @@ export class EmailTemplateService {
     );
   }
 
-  passwordReset(
-    code: string,
-    options?: Partial<EmailTemplateOptions>,
-  ): string {
+  passwordReset(code: string, options?: Partial<EmailTemplateOptions>): string {
     const config = { ...this.defaultOptions, ...options };
     const content = `
       <h2 style="margin-top: 0; color: #111827;">Reset Your Password</h2>
@@ -336,7 +333,7 @@ export class EmailTemplateService {
     return this.getBaseTemplate(
       content,
       'Workspace Invitation',
-      'You\'re Invited to Join a Workspace',
+      "You're Invited to Join a Workspace",
       options,
     );
   }
@@ -420,9 +417,15 @@ export class EmailTemplateService {
     const config = { ...this.defaultOptions, ...options };
 
     const titles = {
-      created: { head: 'Inventory Item Created', sub: 'New item added to your inventory' },
+      created: {
+        head: 'Inventory Item Created',
+        sub: 'New item added to your inventory',
+      },
       low_stock: { head: 'Low Stock Alert', sub: 'An item is running low' },
-      out_of_stock: { head: 'Out of Stock Alert', sub: 'An item has run out of stock' },
+      out_of_stock: {
+        head: 'Out of Stock Alert',
+        sub: 'An item has run out of stock',
+      },
     };
 
     const title = titles[alertType];
@@ -474,10 +477,43 @@ export class EmailTemplateService {
       </p>
     `;
 
+    return this.getBaseTemplate(content, title.head, title.sub, options);
+  }
+
+  debtDueReminder(transaction: any, options?: Partial<EmailTemplateOptions>) {
+    const dueDate = transaction?.dueDate
+      ? new Date(transaction.dueDate).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+      : 'Today';
+    const amount = `NGN ${Number(transaction?.totalAmount || 0).toLocaleString()}`;
+    const customerName = transaction?.customerName || 'Customer';
+    const itemLabel =
+      transaction?.item?.name ||
+      transaction?.itemName ||
+      (Array.isArray(transaction?.lineItems) && transaction.lineItems.length > 0
+        ? `${transaction.lineItems.length} product(s)`
+        : 'your products');
+
+    const content = `
+      <h2 style="margin-top: 0; color: #111827;">Debt Payment Due</h2>
+      <p>Hello ${customerName}, this is a reminder that your payment is due.</p>
+
+      <div class="info-box">
+        <div><strong>Amount due:</strong> ${amount}</div>
+        <div style="margin-top: 8px;"><strong>Due date:</strong> ${dueDate}</div>
+        <div style="margin-top: 8px;"><strong>Items:</strong> ${itemLabel}</div>
+      </div>
+
+      <p>Please contact the business that issued this debt to complete payment.</p>
+    `;
+
     return this.getBaseTemplate(
       content,
-      title.head,
-      title.sub,
+      'Debt Due Reminder',
+      'Your payment is due today',
       options,
     );
   }
@@ -513,7 +549,11 @@ export class EmailTemplateService {
     return this.getBaseTemplate(content, title, '', options);
   }
 
-  invoiceEmail(transaction: any, receiptUrl: string, options?: Partial<EmailTemplateOptions>) {
+  invoiceEmail(
+    transaction: any,
+    receiptUrl: string,
+    options?: Partial<EmailTemplateOptions>,
+  ) {
     const config = { ...this.defaultOptions, ...options };
     const lineItems = (transaction.lineItems || []).map((li: any) => ({
       name: li.name || li.itemId,
@@ -530,21 +570,23 @@ export class EmailTemplateService {
     try {
       // load template file relative to this service
       // NOTE: synchronous read to keep implementation simple
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+
       const fs = require('fs');
       const path = require('path');
       const tplPath = path.join(__dirname, 'email-templates', 'invoice.html');
       let tpl = fs.readFileSync(tplPath, 'utf8');
       tpl = tpl.replace(/{{receiptUrl}}/g, receiptUrl);
       const rows = lineItems
-        .map((li: any) => `
+        .map(
+          (li: any) => `
           <tr>
             <td style="padding:8px;border-bottom:1px solid #eef2ff">${li.name}</td>
             <td style="padding:8px;border-bottom:1px solid #eef2ff;text-align:right">${li.quantity}</td>
             <td style="padding:8px;border-bottom:1px solid #eef2ff;text-align:right">${li.unitPrice}</td>
             <td style="padding:8px;border-bottom:1px solid #eef2ff;text-align:right">${li.discountAmount}</td>
             <td style="padding:8px;border-bottom:1px solid #eef2ff;text-align:right">${li.total}</td>
-          </tr>`)
+          </tr>`,
+        )
         .join('\n');
       tpl = tpl.replace(/{{#each lineItems}}[\s\S]*?{{\/each}}/, rows);
       tpl = tpl.replace(/{{grandTotal}}/g, grandTotal);

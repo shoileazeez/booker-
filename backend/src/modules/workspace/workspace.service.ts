@@ -311,24 +311,24 @@ export class WorkspaceService {
     return memberships
       .filter((membership) => !membership.workspace.parentWorkspaceId)
       .map((membership) => ({
-      id: membership.workspace.id,
-      name: membership.workspace.name,
-      description: membership.workspace.description,
-      logo: membership.workspace.logo,
-      status: membership.workspace.status,
-      slug: membership.workspace.slug,
-      parentWorkspaceId: membership.workspace.parentWorkspaceId,
-      createdAt: membership.workspace.createdAt,
-      updatedAt: membership.workspace.updatedAt,
-      role: membership.role,
-      managerUser: membership.workspace.managerUser
-        ? {
-            id: membership.workspace.managerUser.id,
-            name: membership.workspace.managerUser.name,
-            email: membership.workspace.managerUser.email,
-          }
-        : null,
-    }));
+        id: membership.workspace.id,
+        name: membership.workspace.name,
+        description: membership.workspace.description,
+        logo: membership.workspace.logo,
+        status: membership.workspace.status,
+        slug: membership.workspace.slug,
+        parentWorkspaceId: membership.workspace.parentWorkspaceId,
+        createdAt: membership.workspace.createdAt,
+        updatedAt: membership.workspace.updatedAt,
+        role: membership.role,
+        managerUser: membership.workspace.managerUser
+          ? {
+              id: membership.workspace.managerUser.id,
+              name: membership.workspace.managerUser.name,
+              email: membership.workspace.managerUser.email,
+            }
+          : null,
+      }));
   }
 
   async getWorkspace(workspaceId: string, requesterId?: string) {
@@ -382,10 +382,11 @@ export class WorkspaceService {
     dto: CreateBranchDto,
     requesterId: string,
   ) {
-    const { workspace } = await this.branchAccessService.assertWorkspaceOwnerLike(
-      workspaceId,
-      requesterId,
-    );
+    const { workspace } =
+      await this.branchAccessService.assertWorkspaceOwnerLike(
+        workspaceId,
+        requesterId,
+      );
 
     let managerUser: User | null = null;
     if (dto.managerUserId) {
@@ -580,8 +581,11 @@ export class WorkspaceService {
     Object.assign(branch, {
       name: dto.name ?? branch.name,
       description:
-        dto.description !== undefined ? dto.description || null : branch.description,
-      location: dto.location !== undefined ? dto.location || null : branch.location,
+        dto.description !== undefined
+          ? dto.description || null
+          : branch.description,
+      location:
+        dto.location !== undefined ? dto.location || null : branch.location,
       address: dto.address !== undefined ? dto.address || null : branch.address,
       phone: dto.phone !== undefined ? dto.phone || null : branch.phone,
       managerUserId: managerUser?.id || null,
@@ -796,10 +800,11 @@ export class WorkspaceService {
   }
 
   async getManagementOverview(workspaceId: string, requesterId: string) {
-    const { workspace } = await this.branchAccessService.assertWorkspaceOwnerLike(
-      workspaceId,
-      requesterId,
-    );
+    const { workspace } =
+      await this.branchAccessService.assertWorkspaceOwnerLike(
+        workspaceId,
+        requesterId,
+      );
 
     const branches = await this.branchesRepository.find({
       where: { workspaceId },
@@ -835,7 +840,7 @@ export class WorkspaceService {
       .createQueryBuilder('transaction')
       .select('transaction.branch_id', 'branchId')
       .addSelect(
-        "SUM(CASE WHEN transaction.type = 'sale' THEN transaction.\"totalAmount\" ELSE 0 END)",
+        'SUM(CASE WHEN transaction.type = \'sale\' THEN transaction."totalAmount" ELSE 0 END)',
         'salesAmount',
       )
       .addSelect(
@@ -861,7 +866,7 @@ export class WorkspaceService {
       .addSelect('branch.id', 'branchId')
       .addSelect('branch.name', 'branchName')
       .addSelect(
-        "SUM(CASE WHEN transaction.type = 'sale' THEN transaction.\"totalAmount\" ELSE 0 END)",
+        'SUM(CASE WHEN transaction.type = \'sale\' THEN transaction."totalAmount" ELSE 0 END)',
         'salesAmount',
       )
       .addSelect(
@@ -876,7 +881,7 @@ export class WorkspaceService {
       .addGroupBy('branch.id')
       .addGroupBy('branch.name')
       .orderBy(
-        "SUM(CASE WHEN transaction.type = 'sale' THEN transaction.\"totalAmount\" ELSE 0 END)",
+        'SUM(CASE WHEN transaction.type = \'sale\' THEN transaction."totalAmount" ELSE 0 END)',
         'DESC',
       )
       .getRawMany();
@@ -905,27 +910,26 @@ export class WorkspaceService {
     );
 
     const branchSummaries = branches.map((branch) => ({
-        id: branch.id,
-        name: branch.name,
-        location: branch.location,
-        status: branch.status,
-        createdAt: branch.createdAt,
-        managerUser: branch.managerUser
-          ? {
-              id: branch.managerUser.id,
-              name: branch.managerUser.name,
-              email: branch.managerUser.email,
-            }
-          : null,
-        staffCount: branchMemberships.filter(
-          (membership) => membership.branchId === branch.id,
-        ).length,
-        inventoryCount: inventoryMap.get(branch.id) || 0,
-        salesAmount: transactionMap.get(branch.id)?.salesAmount || 0,
-        salesCount: transactionMap.get(branch.id)?.salesCount || 0,
-        pendingDebtAmount:
-          transactionMap.get(branch.id)?.pendingDebtAmount || 0,
-      }));
+      id: branch.id,
+      name: branch.name,
+      location: branch.location,
+      status: branch.status,
+      createdAt: branch.createdAt,
+      managerUser: branch.managerUser
+        ? {
+            id: branch.managerUser.id,
+            name: branch.managerUser.name,
+            email: branch.managerUser.email,
+          }
+        : null,
+      staffCount: branchMemberships.filter(
+        (membership) => membership.branchId === branch.id,
+      ).length,
+      inventoryCount: inventoryMap.get(branch.id) || 0,
+      salesAmount: transactionMap.get(branch.id)?.salesAmount || 0,
+      salesCount: transactionMap.get(branch.id)?.salesCount || 0,
+      pendingDebtAmount: transactionMap.get(branch.id)?.pendingDebtAmount || 0,
+    }));
 
     const workspaceMemberships = allMemberships.filter(
       (membership) => membership.workspaceId === workspace.id,
@@ -1021,8 +1025,15 @@ export class WorkspaceService {
     };
   }
 
-  async getBranchDetails(workspaceId: string, branchId: string, requesterId: string) {
-    await this.branchAccessService.assertWorkspaceOwnerLike(workspaceId, requesterId);
+  async getBranchDetails(
+    workspaceId: string,
+    branchId: string,
+    requesterId: string,
+  ) {
+    await this.branchAccessService.assertWorkspaceOwnerLike(
+      workspaceId,
+      requesterId,
+    );
 
     const branch = await this.getBranch(workspaceId, branchId, requesterId);
     const inventoryCount = await this.inventoryRepository.count({
@@ -1367,7 +1378,10 @@ export class WorkspaceService {
       ? 'owner'
       : this.getEffectiveWorkspaceRole(membership || parentMembership);
     this.assertRoleCanBeAssigned(requesterRole, inviteRole);
-    const branch = await this.getBranchForInvite(workspaceId, inviteDto.branchId);
+    const branch = await this.getBranchForInvite(
+      workspaceId,
+      inviteDto.branchId,
+    );
     const branchRole = branch
       ? this.normalizeBranchRole(inviteDto.branchRole || inviteRole)
       : null;

@@ -39,7 +39,13 @@ export class Transaction {
   @Column({ type: 'decimal', precision: 10, scale: 2, name: 'totalAmount' })
   totalAmount: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0, name: 'discountAmount' })
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+    name: 'discountAmount',
+  })
   discountAmount: number;
 
   @Column({ nullable: true })
@@ -64,6 +70,9 @@ export class Transaction {
 
   @Column({ type: 'timestamp', nullable: true, name: 'dueDate' })
   dueDate: Date;
+
+  @Column({ type: 'timestamp', nullable: true, name: 'due_reminder_sent_at' })
+  dueReminderSentAt: Date | null;
 
   @Column({ nullable: true })
   notes: string;

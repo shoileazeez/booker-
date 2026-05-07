@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddBranchAssignmentToWorkspaceInvites1710890000000
-  implements MigrationInterface
-{
+export class AddBranchAssignmentToWorkspaceInvites1710890000000 implements MigrationInterface {
   name = 'AddBranchAssignmentToWorkspaceInvites1710890000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

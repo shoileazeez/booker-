@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateUserPushTokensTable1710910000000
-  implements MigrationInterface
-{
+export class CreateUserPushTokensTable1710910000000 implements MigrationInterface {
   name = 'CreateUserPushTokensTable1710910000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

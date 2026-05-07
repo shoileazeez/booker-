@@ -11,7 +11,12 @@ import { NotificationsController } from './notifications.controller';
 @Module({
   imports: [ConfigModule, TypeOrmModule.forFeature([UserPushToken])],
   controllers: [NotificationsController],
-  providers: [EmailService, EmailQueueService, EmailTemplateService, PushService],
+  providers: [
+    EmailService,
+    EmailQueueService,
+    EmailTemplateService,
+    PushService,
+  ],
   exports: [EmailService, EmailQueueService, EmailTemplateService, PushService],
 })
 export class NotificationsModule {}

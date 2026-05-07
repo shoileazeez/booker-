@@ -38,8 +38,14 @@ export class BillingController {
 
   @UseGuards(JwtAuthGuard)
   @Get('workspaces/:workspaceId/context')
-  async getWorkspaceContext(@Request() req, @Param('workspaceId') workspaceId: string) {
-    return this.billingService.getWorkspaceBillingContextForUser(req.user.sub, workspaceId);
+  async getWorkspaceContext(
+    @Request() req,
+    @Param('workspaceId') workspaceId: string,
+  ) {
+    return this.billingService.getWorkspaceBillingContextForUser(
+      req.user.sub,
+      workspaceId,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
@@ -47,7 +53,8 @@ export class BillingController {
   async checkout(@Request() req, @Body() dto: InitiateCheckoutDto) {
     // Paystack checkout deprecated — migrate to Google Play Billing.
     return {
-      error: 'Paystack checkout deprecated. Use Google Play Billing on Android to purchase subscriptions.',
+      error:
+        'Paystack checkout deprecated. Use Google Play Billing on Android to purchase subscriptions.',
     };
   }
 
@@ -55,7 +62,10 @@ export class BillingController {
   @Post('verify')
   async verify(@Request() req, @Body() dto: VerifyPaymentDto) {
     // Paystack verification deprecated.
-    return { error: 'Paystack payment verification is deprecated. Please migrate to Google Play Billing.' };
+    return {
+      error:
+        'Paystack payment verification is deprecated. Please migrate to Google Play Billing.',
+    };
   }
 
   @Post('webhook/paystack')
@@ -66,18 +76,28 @@ export class BillingController {
     // Paystack webhook endpoint removed — Paystack deprecated in favor of
     // Google Play Billing. Keep endpoint around to avoid breaking integrators,
     // but return a deprecation response.
-    return { received: true, message: 'Paystack webhook handling deprecated. Please migrate to Google Play Billing.' };
+    return {
+      received: true,
+      message:
+        'Paystack webhook handling deprecated. Please migrate to Google Play Billing.',
+    };
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('verify/google')
-  async verifyGooglePurchase(@Request() req, @Body() dto: VerifyGooglePurchaseDto) {
+  async verifyGooglePurchase(
+    @Request() req,
+    @Body() dto: VerifyGooglePurchaseDto,
+  ) {
     return this.billingService.verifyGooglePurchase(req.user.sub, dto);
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('workspaces/:workspaceId/remind-owner')
-  async remindWorkspaceOwner(@Request() req, @Param('workspaceId') workspaceId: string) {
+  async remindWorkspaceOwner(
+    @Request() req,
+    @Param('workspaceId') workspaceId: string,
+  ) {
     return this.billingService.remindWorkspaceOwner(req.user.sub, workspaceId);
   }
 

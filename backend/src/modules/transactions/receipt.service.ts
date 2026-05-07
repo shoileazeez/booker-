@@ -56,7 +56,7 @@ export class ReceiptService {
     try {
       if (workspaceLogo) {
         // Attempt to fetch image buffer (node >=18 provides global fetch)
-        const res = await fetch(workspaceLogo as string).catch(() => null);
+        const res = await fetch(workspaceLogo).catch(() => null);
         if (res && res.ok) {
           const buf = Buffer.from(await res.arrayBuffer());
           doc.image(buf, 40, 30, { width: 60, height: 60 });
@@ -111,7 +111,9 @@ export class ReceiptService {
       .text(
         `Recorded by team member: ${transaction.createdBy?.name || 'Team member'}`,
       )
-      .text(`Payment method: ${(transaction.paymentMethod || 'cash').toUpperCase()}`)
+      .text(
+        `Payment method: ${(transaction.paymentMethod || 'cash').toUpperCase()}`,
+      )
       .text(`Status: ${(transaction.status || 'pending').toUpperCase()}`);
     if (transaction.dueDate) {
       doc.text(`Due date: ${transaction.dueDate.toLocaleDateString()}`);
@@ -121,9 +123,7 @@ export class ReceiptService {
 
     const sectionHeader = (label: string) => {
       const y = doc.y;
-      doc
-        .rect(40, y, contentWidth, 22)
-        .fill('#f1f5f9');
+      doc.rect(40, y, contentWidth, 22).fill('#f1f5f9');
       doc
         .fillColor('#0f172a')
         .fontSize(11)
@@ -143,10 +143,20 @@ export class ReceiptService {
     sectionHeader('TRANSACTION DETAILS');
     doc.fillColor('#374151').fontSize(10);
     // If this transaction has line items, render a table
-    if (transaction.lineItems && Array.isArray(transaction.lineItems) && transaction.lineItems.length) {
+    if (
+      transaction.lineItems &&
+      Array.isArray(transaction.lineItems) &&
+      transaction.lineItems.length
+    ) {
       const headers = ['Item', 'Qty', 'Unit', 'Discount', 'Total'];
       const startX = 48;
-      const colWidths = [contentWidth * 0.45, contentWidth * 0.12, contentWidth * 0.14, contentWidth * 0.14, contentWidth * 0.15];
+      const colWidths = [
+        contentWidth * 0.45,
+        contentWidth * 0.12,
+        contentWidth * 0.14,
+        contentWidth * 0.14,
+        contentWidth * 0.15,
+      ];
       // header row
       let x = startX;
       headers.forEach((h, i) => {
@@ -157,15 +167,24 @@ export class ReceiptService {
       // rows
       transaction.lineItems.forEach((li: any) => {
         let x = startX;
-        doc.fillColor('#374151').fontSize(10).text(li.name || li.itemId, x, doc.y, { width: colWidths[0] });
+        doc
+          .fillColor('#374151')
+          .fontSize(10)
+          .text(li.name || li.itemId, x, doc.y, { width: colWidths[0] });
         x += colWidths[0];
         doc.text(String(li.quantity), x, doc.y, { width: colWidths[1] });
         x += colWidths[1];
-        doc.text(formatCurrency(Number(li.unitPrice || 0)), x, doc.y, { width: colWidths[2] });
+        doc.text(formatCurrency(Number(li.unitPrice || 0)), x, doc.y, {
+          width: colWidths[2],
+        });
         x += colWidths[2];
-        doc.text(formatCurrency(Number(li.discountAmount || 0)), x, doc.y, { width: colWidths[3] });
+        doc.text(formatCurrency(Number(li.discountAmount || 0)), x, doc.y, {
+          width: colWidths[3],
+        });
         x += colWidths[3];
-        doc.text(formatCurrency(Number(li.total || 0)), x, doc.y, { width: colWidths[4] });
+        doc.text(formatCurrency(Number(li.total || 0)), x, doc.y, {
+          width: colWidths[4],
+        });
         doc.moveDown(0.6);
       });
     } else {
@@ -175,7 +194,10 @@ export class ReceiptService {
         .text(`Category: ${itemCategory}`, 48)
         .text(`Location: ${itemLocation}`, 48)
         .text(`Quantity: ${Number(transaction.quantity || 0)}`, 48)
-        .text(`Unit Price: ${formatCurrency(Number(transaction.unitPrice || 0))}`, 48)
+        .text(
+          `Unit Price: ${formatCurrency(Number(transaction.unitPrice || 0))}`,
+          48,
+        )
         .text(`Remaining Stock: ${currentStock}`, 48)
         .moveDown(0.7);
     }
@@ -222,10 +244,15 @@ export class ReceiptService {
     doc
       .fillColor('#0f172a')
       .fontSize(10)
-      .text('This receipt was issued by the workspace provider listed above.', 40, doc.y + 10, {
-        align: 'center',
-        width: contentWidth,
-      })
+      .text(
+        'This receipt was issued by the workspace provider listed above.',
+        40,
+        doc.y + 10,
+        {
+          align: 'center',
+          width: contentWidth,
+        },
+      )
       .fillColor('#6b7280')
       .fontSize(9)
       .text('Generated securely by BizRecord', 40, doc.y + 26, {

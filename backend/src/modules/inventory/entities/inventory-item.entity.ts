@@ -32,10 +32,22 @@ export class InventoryItem {
   @Column({ type: 'decimal', precision: 10, scale: 2, name: 'costPrice' })
   costPrice: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true, name: 'sellingPrice' })
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    name: 'sellingPrice',
+  })
   sellingPrice: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0, name: 'reorderLevel' })
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+    name: 'reorderLevel',
+  })
   reorderLevel: number;
 
   @Column({ nullable: true })
