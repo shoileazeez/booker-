@@ -148,6 +148,21 @@ const SettingsScreen = function({ navigation }) {
             </View>
           </View>
         </View>
+
+        <View style={[styles.settingItem, { borderBottomWidth: 0 }]}>
+          <View style={styles.settingInfo}>
+            <MaterialIcons name="notifications" size={24} color={theme.colors.primary} />
+            <View style={styles.settingText}>
+              <Text style={[styles.settingTitle, { color: theme.colors.textPrimary }]}>Notifications</Text>
+              <Text style={[styles.settingDescription, { color: theme.colors.textSecondary }]}>
+                View your in-app notification inbox
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
+            <MaterialIcons name="chevron-right" size={24} color={theme.colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={[styles.settingsCard, { backgroundColor: theme.colors.card, width: contentWidth }]}>

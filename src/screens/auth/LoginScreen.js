@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal } from 'react-native';
 import {
   View,
@@ -12,8 +12,9 @@ import {
 import { Card, AppButton } from '../../components/UI';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
+import { showSuccessToast } from '../../utils/toast';
 
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen({ navigation, route }) {
   const { login, setBiometricOptIn, isBiometricAvailable, getBiometricOptIn } = useAuth();
   const themeContext = useTheme();
   const theme = themeContext.theme;
@@ -26,11 +27,20 @@ export default function LoginScreen({ navigation }) {
   const isCompact = width < 380;
   const formWidth = Math.min(width - (isCompact ? 24 : 36), 460);
 
+  useEffect(() => {
+    const flashMessage = route?.params?.flashMessage;
+    if (flashMessage) {
+      showSuccessToast(flashMessage);
+      navigation.setParams({ flashMessage: undefined });
+    }
+  }, [navigation, route?.params?.flashMessage]);
+
   const handleLogin = async () => {
     setError(null);
     setLoading(true);
     try {
       await login(email.trim(), password);
+      showSuccessToast('Signed in successfully');
       // After successful login, prompt for biometric opt-in (Android only)
       if (
         Platform.OS === 'android' &&

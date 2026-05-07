@@ -16,6 +16,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { api } from '../api/client';
 import * as offlineStore from '../storage/offlineStore';
+import { showSuccessToast } from '../utils/toast';
 
 const AddItemScreen = function({ navigation }) {
   const themeContext = useTheme();
@@ -80,9 +81,7 @@ const AddItemScreen = function({ navigation }) {
         offlineStore.setIdMapping('inventory', localId, serverId).catch(() => null);
       }
 
-      Platform.OS === 'web'
-        ? window.alert(`Item added successfully to ${inventoryScopeLabel}!`)
-        : Alert.alert('Success', `Item added successfully to ${inventoryScopeLabel}!`);
+      showSuccessToast(`Item added successfully to ${inventoryScopeLabel}!`);
 
       setName('');
       setQuantity('1');

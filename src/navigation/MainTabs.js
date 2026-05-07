@@ -23,6 +23,7 @@ import StockTransferScreen from '../screens/admin/StockTransferScreen';
 import WorkspaceSetupScreen from '../screens/workspace/WorkspaceSetupScreen';
 import WorkspaceInvitesScreen from '../screens/workspace/WorkspaceInvitesScreen';
 import TeamManagementScreen from '../screens/TeamManagementScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
 import { useTheme } from '../theme/ThemeContext';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -139,6 +140,7 @@ export default function MainTabs() {
       <Stack.Screen name="JoinWorkspace" component={WorkspaceInvitesScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="EditItem" component={EditItemScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ presentation: 'modal' }} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ presentation: 'modal' }} />
       <Stack.Screen name="CustomerListScreen" component={require('../screens/CustomerListScreen').default} options={{ presentation: 'modal', title: 'Customers' }} />
       <Stack.Screen name="AddCustomerScreen" component={require('../screens/AddCustomerScreen').default} options={{ presentation: 'modal', title: 'Add Customer' }} />
       <Stack.Screen name="EditCustomerScreen" component={require('../screens/EditCustomerScreen').default} options={{ presentation: 'modal', title: 'Edit Customer' }} />

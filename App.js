@@ -14,6 +14,8 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { CustomerSelectProvider } from './src/context/CustomerSelectContext';
 import { initDb } from './src/storage/sqlite';
 import { api } from './src/api/client';
+import { initializeNotificationInbox } from './src/services/notificationInbox';
+import { ensurePushChannel } from './src/services/pushNotifications';
 
 const Stack = createNativeStackNavigator();
 
@@ -76,9 +78,22 @@ function RootNavigator() {
 
 export default function App() {
   useEffect(() => {
+    let cleanupInboxListener = null;
     initDb().catch(() => {
       // Keep app boot resilient if local SQLite is temporarily unavailable.
     });
+    ensurePushChannel().catch(() => null);
+    initializeNotificationInbox()
+      .then((cleanup) => {
+        cleanupInboxListener = cleanup;
+      })
+      .catch(() => null);
+
+    return () => {
+      if (typeof cleanupInboxListener === 'function') {
+        cleanupInboxListener();
+      }
+    };
   }, []);
 
   return (

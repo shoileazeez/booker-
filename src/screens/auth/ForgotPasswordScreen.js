@@ -10,6 +10,7 @@ import {
 import { useTheme } from '../../theme/ThemeContext';
 import { AppButton, Card } from '../../components/UI';
 import { api } from '../../api/client';
+import { showSuccessToast } from '../../utils/toast';
 
 export default function ForgotPasswordScreen({ navigation }) {
   const themeContext = useTheme();
@@ -35,6 +36,7 @@ export default function ForgotPasswordScreen({ navigation }) {
         response?.message ||
           'If an account exists for that email, a 6-digit reset code has been sent.',
       );
+      showSuccessToast('Reset code sent');
       navigation.navigate('ResetPassword', { email: trimmedEmail });
     } catch (err) {
       setError(err?.message || 'Unable to send reset code');

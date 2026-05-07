@@ -161,7 +161,7 @@ export class PushService {
     const provider = (
       this.configService.get<string>('PUSH_PROVIDER') || 'expo'
     ).toLowerCase();
-    const messages = tokens.map((token) => ({
+    const messages: ExpoPushMessage[] = tokens.map((token) => ({
       to: token,
       title: input.title,
       body: input.body,

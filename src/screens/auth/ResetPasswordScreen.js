@@ -10,6 +10,7 @@ import {
 import { api } from '../../api/client';
 import { useTheme } from '../../theme/ThemeContext';
 import { Card, AppButton } from '../../components/UI';
+import { showSuccessToast } from '../../utils/toast';
 
 export default function ResetPasswordScreen({ route, navigation }) {
   const { theme } = useTheme();
@@ -37,7 +38,9 @@ export default function ResetPasswordScreen({ route, navigation }) {
         code: code.trim(),
         newPassword,
       });
-      navigation.replace('Login');
+      navigation.replace('Login', {
+        flashMessage: 'Password reset successful. Please sign in.',
+      });
     } catch (err) {
       setError(err?.message || 'Unable to reset password');
     } finally {
@@ -57,6 +60,7 @@ export default function ResetPasswordScreen({ route, navigation }) {
         response?.message ||
           'If an account exists for that email, a fresh reset code has been sent.',
       );
+      showSuccessToast('Reset code resent');
     } catch (err) {
       setError(err?.message || 'Unable to resend reset code');
     } finally {

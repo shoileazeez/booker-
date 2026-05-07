@@ -4,6 +4,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { api } from '../../api/client';
 import * as offlineStore from '../../storage/offlineStore';
+import { showSuccessToast } from '../../utils/toast';
 
 export default function EditItemScreen({ navigation, route }) {
   const themeContext = useTheme();
@@ -87,9 +88,7 @@ export default function EditItemScreen({ navigation, route }) {
         }
       }
 
-      Platform.OS === 'web'
-        ? window.alert('Item saved successfully')
-        : Alert.alert('Success', 'Item saved successfully');
+      showSuccessToast('Item saved successfully');
 
       navigation.goBack();
     } catch (err) {

@@ -12,6 +12,7 @@ import {
 import { Card, AppButton } from '../../components/UI';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
+import { showSuccessToast } from '../../utils/toast';
 
 export default function RegisterScreen({ navigation }) {
   const { register } = useAuth();
@@ -46,6 +47,7 @@ export default function RegisterScreen({ navigation }) {
     try {
       const response = await register({ name: name.trim(), phone: phone.trim(), email: email.trim(), password });
       if (response?.requiresEmailVerification) {
+        showSuccessToast('Account created. Check your email for verification code.');
         navigation.replace('VerifyEmail', {
           email: response?.email || email.trim(),
           fromRegistration: true,

@@ -337,6 +337,7 @@ export default function RecordSaleScreen({ navigation, route }) {
         'cash',
       customerId: customerId || undefined,
       customerName: selectedCustomerRecord?.name || undefined,
+      customerEmail: selectedCustomerRecord?.email || undefined,
       phone: selectedCustomerRecord?.phone || undefined,
       dueDate,
       status: saleMode === 'debt' ? 'pending' : 'completed',

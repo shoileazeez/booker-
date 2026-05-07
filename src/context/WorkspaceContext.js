@@ -144,6 +144,8 @@ async function syncCoordinatorWorker({ token, currentWorkspaceId, currentBranchI
           }
         } else if (action.action_type === 'update_debt') {
           apiRes = await api.put(`${transactionsBasePath}/${serverId}`, syncPayload);
+        } else if (action.action_type === 'update_debt_return') {
+          apiRes = await api.post(`${transactionsBasePath}/${serverId}/debt-return`, syncPayload);
         } else if (action.action_type === 'delete_debt') {
           apiRes = await api.delete(`${transactionsBasePath}/${serverId}`);
         } else if (action.action_type === 'create_customer') {
@@ -245,6 +247,34 @@ const stampLocalEntityDates = (payload = {}, now = Date.now()) => {
 };
 
 const parseActionRoute = (path = '') => {
+  const debtReturn = path.match(
+    /^\/workspaces\/([^/]+)\/branches\/([^/]+)\/transactions\/([^/]+)\/debt-return$/,
+  );
+  if (debtReturn) {
+    return {
+      workspaceId: debtReturn[1],
+      branchId: debtReturn[2],
+      scopeId: debtReturn[2],
+      domain: 'transactions',
+      targetId: debtReturn[3],
+      operation: 'debt_return',
+    };
+  }
+
+  const workspaceDebtReturn = path.match(
+    /^\/workspaces\/([^/]+)\/transactions\/([^/]+)\/debt-return$/,
+  );
+  if (workspaceDebtReturn) {
+    return {
+      workspaceId: workspaceDebtReturn[1],
+      branchId: null,
+      scopeId: workspaceDebtReturn[1],
+      domain: 'transactions',
+      targetId: workspaceDebtReturn[2],
+      operation: 'debt_return',
+    };
+  }
+
   const workspaceInventory = path.match(/^\/workspaces\/([^/]+)\/inventory(?:\/([^/]+))?$/);
   if (workspaceInventory) {
     return {
@@ -521,6 +551,24 @@ export const WorkspaceProvider = function({ children }) {
     }
 
     if (route.domain === 'transactions') {
+      if (action.method === 'post' && route.operation === 'debt_return' && route.targetId) {
+        const targetId = String(route.targetId);
+        const localId = targetId.startsWith('local_')
+          ? targetId
+          : (await offlineStore.getLocalIdByServerId('debt', targetId, workspaceRef)) || targetId;
+        await offlineStore.addSyncOutboxAction({
+          action_id: generateLocalId('debt_return'),
+          action_type: 'update_debt_return',
+          entity_type: 'debt',
+          entity_local_id: localId,
+          workspace_ref: workspaceRef,
+          payload: action.body || {},
+          created_at: now,
+          updated_at: now,
+        });
+        return;
+      }
+
       const txType = String(action?.body?.type || '').toLowerCase();
       const entityType = txType === 'debt' ? 'debt' : 'transaction';
       const actionPrefix = txType === 'debt' ? 'debt' : 'transaction';

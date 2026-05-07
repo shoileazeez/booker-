@@ -15,6 +15,7 @@ const STORAGE_KEY = '@booker:auth';
 const OFFLINE_PWHASH_KEY = '@booker:offlinePwHash';
 const OFFLINE_PWHASH_META_KEY = '@booker:offlinePwMeta';
 const OFFLINE_MAX_DAYS = 7;
+const AUTO_LOCK_DELAY_MS = 3 * 60 * 1000;
 const isLikelyOfflineError = (err) => !!err?.message && /network|offline|timeout|fetch/i.test(err.message);
 
 export const AuthProvider = ({ children }) => {
@@ -24,6 +25,7 @@ export const AuthProvider = ({ children }) => {
   const [requiresReAuth, setRequiresReAuth] = useState(false);
   const [pauseAutoLock, setPauseAutoLock] = useState(false);
   const appStateRef = useRef(AppState.currentState);
+  const backgroundedAtRef = useRef(null);
   const userRef = useRef(null);
   const pauseAutoLockRef = useRef(false);
 
@@ -245,9 +247,16 @@ export const AuthProvider = ({ children }) => {
       const prev = appStateRef.current;
       appStateRef.current = nextState;
       const wasBackgrounded = typeof prev === 'string' && /(inactive|background)/.test(prev);
+      if (nextState === 'inactive' || nextState === 'background') {
+        backgroundedAtRef.current = Date.now();
+      }
       // Skip auto-lock if pauseAutoLock is enabled (e.g., during payment flow)
       // Use ref to avoid recreating listener when pauseAutoLock changes
       if (wasBackgrounded && nextState === 'active' && userRef.current && !pauseAutoLockRef.current) {
+        const elapsed = backgroundedAtRef.current ? Date.now() - backgroundedAtRef.current : 0;
+        if (elapsed < AUTO_LOCK_DELAY_MS) {
+          return;
+        }
         setRequiresReAuth(true);
         // Try biometric unlock if Android and opted in
         if (

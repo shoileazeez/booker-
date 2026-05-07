@@ -111,16 +111,18 @@ export default function RecordDebtScreen({ navigation }) {
       ? new Date(Date.now() + parseInt(dueInDays, 10) * 86400000).toISOString()
       : null;
     const nowIso = new Date().toISOString();
+    const selectedCustomerRecord = customers.find((c) => c.id === selectedCustomer?.id);
     const payload = {
       type: 'debt',
       quantity: 1,
       unitPrice: parseFloat(amount),
       totalAmount: parseFloat(amount),
       phone: phone || selectedCustomer?.phone || undefined,
+      customerEmail: selectedCustomerRecord?.email || undefined,
       dueDate: dueDate || undefined,
       notes: notes || undefined,
       customerId: selectedCustomer?.id || undefined,
-      customerName: customers.find((c) => c.id === selectedCustomer?.id)?.name || selectedCustomer?.name || undefined,
+      customerName: selectedCustomerRecord?.name || selectedCustomer?.name || undefined,
       status: 'pending',
       createdAt: nowIso,
       updatedAt: nowIso,
@@ -349,4 +351,3 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
 });
-

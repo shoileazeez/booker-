@@ -9,6 +9,8 @@ const PUSH_TOKEN_STORAGE_KEY = '@booker:pushToken';
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
@@ -22,6 +24,16 @@ function getProjectId() {
   );
 }
 
+export async function ensurePushChannel() {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync('default', {
+    name: 'default',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#031f38',
+  });
+}
+
 export async function registerPushTokenWithBackend(api) {
   if (!Device.isDevice) {
     return null;
@@ -31,7 +43,13 @@ export async function registerPushTokenWithBackend(api) {
   let finalStatus = existingStatus;
 
   if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
+    const { status } = await Notifications.requestPermissionsAsync({
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
+      },
+    });
     finalStatus = status;
   }
 
@@ -39,18 +57,14 @@ export async function registerPushTokenWithBackend(api) {
     return null;
   }
 
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#031f38',
-    });
-  }
+  await ensurePushChannel();
 
   const projectId = getProjectId();
+  if (!projectId) {
+    throw new Error('Missing Expo projectId for push token registration');
+  }
   const tokenResponse = await Notifications.getExpoPushTokenAsync(
-    projectId ? { projectId } : undefined,
+    { projectId },
   );
   const token = tokenResponse?.data;
   if (!token) return null;

@@ -8,6 +8,8 @@ import {
   Linking,
   Alert,
   useWindowDimensions,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
@@ -48,6 +50,23 @@ const getDueInfo = (dueDate) => {
     return { label: `${Math.abs(diffDays)} day(s) overdue`, overdue: true };
   }
   return { label: `${diffDays} day(s) remaining`, overdue: false };
+};
+
+const getOutstandingQuantity = (item = {}) => {
+  const lineItems = Array.isArray(item?.lineItems) ? item.lineItems : [];
+  if (lineItems.length > 0) {
+    return lineItems.reduce((sum, line) => sum + Number(line?.quantity || 0), 0);
+  }
+  return Number(item?.quantity || 0);
+};
+
+const getReturnItemId = (item = {}) => {
+  if (item?.item?.id) return String(item.item.id);
+  const lineItems = Array.isArray(item?.lineItems) ? item.lineItems : [];
+  if (lineItems.length === 1 && lineItems[0]?.itemId) {
+    return String(lineItems[0].itemId);
+  }
+  return null;
 };
 
 const dedupeDebts = (items = []) => {
@@ -117,6 +136,10 @@ export default function DebtScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [returnDebt, setReturnDebt] = useState(null);
+  const [returnQuantity, setReturnQuantity] = useState('1');
+  const [returnNotes, setReturnNotes] = useState('');
+  const [submittingReturn, setSubmittingReturn] = useState(false);
   const transactionPath = activeBranchId
     ? `/workspaces/${currentWorkspaceId}/branches/${activeBranchId}/transactions`
     : `/workspaces/${currentWorkspaceId}/transactions`;
@@ -372,6 +395,148 @@ export default function DebtScreen({ navigation }) {
     }
   };
 
+  const openReturnModal = (debt) => {
+    const outstanding = getOutstandingQuantity(debt);
+    if (!outstanding || outstanding <= 0) {
+      Alert.alert('Nothing to return', 'This debt has no outstanding quantity.');
+      return;
+    }
+    if (!getReturnItemId(debt) && Array.isArray(debt?.lineItems) && debt.lineItems.length > 1) {
+      Alert.alert(
+        'Return unavailable',
+        'This debt has multiple products. Product-level returns for mixed carts are not supported in this view yet.',
+      );
+      return;
+    }
+    setReturnDebt(debt);
+    setReturnQuantity('1');
+    setReturnNotes('');
+  };
+
+  const submitReturn = async () => {
+    if (!returnDebt) return;
+    const qty = Number(returnQuantity || 0);
+    const outstanding = getOutstandingQuantity(returnDebt);
+    if (!qty || qty <= 0) {
+      Alert.alert('Validation Error', 'Return quantity must be greater than zero.');
+      return;
+    }
+    if (qty > outstanding) {
+      Alert.alert('Validation Error', `You can return up to ${outstanding} unit(s).`);
+      return;
+    }
+
+    const existingDebt = debts.find(
+      (item) =>
+        String(item.id) === String(returnDebt.id) ||
+        String(item.local_id) === String(returnDebt.local_id) ||
+        String(item.server_id) === String(returnDebt.server_id),
+    ) || returnDebt;
+
+    const localId =
+      existingDebt?.local_id ||
+      (String(existingDebt?.id || '').startsWith('local_') ? String(existingDebt.id) : null);
+    const serverId =
+      existingDebt?.server_id ||
+      (localId ? await getServerId('debt', localId) : null) ||
+      (String(existingDebt?.id || '').startsWith('local_') ? null : String(existingDebt?.id || ''));
+    if (!serverId && !repo?.queueAction) {
+      Alert.alert('Error', 'Debt has not synced yet. Please try again when online.');
+      return;
+    }
+
+    const requestBody = {
+      quantity: qty,
+      notes: returnNotes.trim() || undefined,
+      itemId: getReturnItemId(existingDebt) || undefined,
+    };
+
+    setSubmittingReturn(true);
+    try {
+      let updatedDebt = null;
+      if (serverId) {
+        updatedDebt = await api.post(`${transactionPath}/${serverId}/debt-return`, requestBody);
+      } else {
+        await repo.queueAction({
+          method: 'post',
+          path: `${transactionPath}/${localId}/debt-return`,
+          body: requestBody,
+        });
+      }
+
+      const baseDebt = updatedDebt || existingDebt;
+      const outstandingAfter = Math.max(0, getOutstandingQuantity(existingDebt) - qty);
+      const fallbackAmount = Math.max(
+        0,
+        Number(existingDebt.totalAmount || 0) -
+          (Number(existingDebt.totalAmount || 0) / Math.max(getOutstandingQuantity(existingDebt), 1)) * qty,
+      );
+      const backendTotalAmount = Number(baseDebt?.totalAmount);
+      const backendQuantity = Number(baseDebt?.quantity);
+      const shouldUseFallbackAmount =
+        !Number.isFinite(backendTotalAmount) ||
+        (Number.isFinite(backendQuantity) &&
+          backendQuantity < getOutstandingQuantity(existingDebt) &&
+          backendTotalAmount >= Number(existingDebt.totalAmount || 0));
+      const mergedDebt = {
+        ...existingDebt,
+        ...baseDebt,
+        id: baseDebt?.id || serverId || localId || existingDebt.id,
+        local_id: localId || existingDebt.local_id || existingDebt.id,
+        server_id: serverId || existingDebt.server_id || null,
+        quantity: baseDebt?.quantity ?? outstandingAfter,
+        totalAmount: shouldUseFallbackAmount
+          ? fallbackAmount
+          : (baseDebt?.totalAmount ?? fallbackAmount),
+        status: baseDebt?.status || (outstandingAfter <= 0 ? 'completed' : existingDebt.status),
+        notes: baseDebt?.notes || existingDebt.notes,
+        updatedAt: new Date().toISOString(),
+      };
+
+      const syncStatus = serverId ? 'synced' : 'pending_update';
+      await Promise.all([
+        upsertLocalDebt(
+          {
+            local_id: mergedDebt.local_id,
+            server_id: mergedDebt.server_id,
+            workspace_server_id: transactionScopeId,
+            data: mergedDebt,
+            sync_status: syncStatus,
+          },
+          transactionScopeId,
+        ),
+        upsertLocalTransaction(
+          {
+            local_id: mergedDebt.local_id,
+            server_id: mergedDebt.server_id,
+            workspace_server_id: transactionScopeId,
+            data: mergedDebt,
+            sync_status: syncStatus,
+          },
+          transactionScopeId,
+        ),
+      ]);
+
+      setDebts((prev) =>
+        prev.map((item) =>
+          String(item.id) === String(existingDebt.id) ||
+          String(item.local_id) === String(existingDebt.local_id) ||
+          String(item.server_id) === String(existingDebt.server_id)
+            ? mergedDebt
+            : item,
+        ),
+      );
+
+      setReturnDebt(null);
+      setReturnQuantity('1');
+      setReturnNotes('');
+    } catch (err) {
+      Alert.alert('Error', err?.message || 'Unable to process return');
+    } finally {
+      setSubmittingReturn(false);
+    }
+  };
+
   const pendingCount = useMemo(
     () => debts.filter((item) => item.status === 'pending').length,
     [debts],
@@ -483,6 +648,7 @@ export default function DebtScreen({ navigation }) {
             const dueInfo = getDueInfo(item.dueDate);
             const isPending = item.status === 'pending';
             const amount = Number(item.totalAmount || 0);
+            const outstandingQuantity = getOutstandingQuantity(item);
 
             return (
               <Card
@@ -520,6 +686,11 @@ export default function DebtScreen({ navigation }) {
                     {item.itemName || item.item?.name ? (
                       <Subtle style={{ marginTop: 2 }}>
                         Goods: {item.itemName || item.item?.name}
+                      </Subtle>
+                    ) : null}
+                    {outstandingQuantity > 0 ? (
+                      <Subtle style={{ marginTop: 2 }}>
+                        Outstanding quantity: {outstandingQuantity}
                       </Subtle>
                     ) : null}
                     {renderSyncBadge(item)}
@@ -571,6 +742,14 @@ export default function DebtScreen({ navigation }) {
                         ]}
                       />
                     ) : null}
+                    {isPending && outstandingQuantity > 0 ? (
+                      <AppButton
+                        title="Return item"
+                        variant="secondary"
+                        onPress={() => openReturnModal(item)}
+                        style={[styles.payButton, { marginTop: 8 }]}
+                      />
+                    ) : null}
                   </View>
                 </View>
               </Card>
@@ -578,6 +757,82 @@ export default function DebtScreen({ navigation }) {
           }}
         />
       )}
+      <Modal
+        visible={!!returnDebt}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setReturnDebt(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View
+            style={[
+              styles.modalCard,
+              { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+            ]}
+          >
+            <Text style={{ color: theme.colors.textPrimary, fontSize: 17, fontWeight: '700' }}>
+              Product Return
+            </Text>
+            <Text style={{ color: theme.colors.textSecondary, marginTop: 8 }}>
+              Customer: {returnDebt?.customerName || 'Unknown'}
+            </Text>
+            <Text style={{ color: theme.colors.textSecondary, marginTop: 4 }}>
+              Outstanding: {getOutstandingQuantity(returnDebt)} unit(s)
+            </Text>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 14 }}>
+              Return quantity
+            </Text>
+            <TextInput
+              value={returnQuantity}
+              onChangeText={setReturnQuantity}
+              keyboardType="number-pad"
+              style={[
+                styles.modalInput,
+                {
+                  color: theme.colors.textPrimary,
+                  borderColor: theme.colors.border,
+                  backgroundColor: theme.colors.background,
+                },
+              ]}
+            />
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 10 }}>
+              Description (optional)
+            </Text>
+            <TextInput
+              value={returnNotes}
+              onChangeText={setReturnNotes}
+              placeholder="Reason for return"
+              placeholderTextColor={theme.colors.textSecondary}
+              style={[
+                styles.modalInput,
+                {
+                  color: theme.colors.textPrimary,
+                  borderColor: theme.colors.border,
+                  backgroundColor: theme.colors.background,
+                  minHeight: 70,
+                  textAlignVertical: 'top',
+                },
+              ]}
+              multiline
+            />
+            <View style={{ flexDirection: 'row', marginTop: 16 }}>
+              <AppButton
+                title="Cancel"
+                variant="ghost"
+                onPress={() => setReturnDebt(null)}
+                style={{ flex: 1, marginRight: 8 }}
+              />
+              <AppButton
+                title={submittingReturn ? 'Saving...' : 'Confirm return'}
+                onPress={submitReturn}
+                loading={submittingReturn}
+                disabled={submittingReturn}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -621,5 +876,26 @@ const styles = StyleSheet.create({
   },
   payButton: {
     minWidth: 108,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 440,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 16,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 6,
   },
 });

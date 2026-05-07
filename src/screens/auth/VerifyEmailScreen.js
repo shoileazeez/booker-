@@ -11,6 +11,7 @@ import {
 import { Card, AppButton } from '../../components/UI';
 import { api } from '../../api/client';
 import { useTheme } from '../../theme/ThemeContext';
+import { showSuccessToast } from '../../utils/toast';
 
 export default function VerifyEmailScreen({ route, navigation }) {
   const { theme } = useTheme();
@@ -41,7 +42,9 @@ export default function VerifyEmailScreen({ route, navigation }) {
         email: email.trim(),
         code: code.trim(),
       });
-      navigation.replace('Login');
+      navigation.replace('Login', {
+        flashMessage: 'Email verified successfully. Please sign in.',
+      });
     } catch (err) {
       setError(err?.message || 'Unable to verify email');
     } finally {
@@ -61,6 +64,7 @@ export default function VerifyEmailScreen({ route, navigation }) {
         response?.message ||
           'Verification code sent. Check your inbox and try again.',
       );
+      showSuccessToast('Verification code sent');
     } catch (err) {
       setError(err?.message || 'Unable to resend code');
     } finally {
