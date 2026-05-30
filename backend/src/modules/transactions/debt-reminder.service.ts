@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { Transaction } from './entities/transaction.entity';
 import { EmailQueueService } from '../notifications/email-queue.service';
 import { EmailTemplateService } from '../notifications/email-template.service';
+import { AlertingService } from '../notifications/alerting.service';
 
 @Injectable()
 export class DebtReminderService implements OnModuleInit, OnModuleDestroy {
@@ -23,6 +24,7 @@ export class DebtReminderService implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
     private readonly emailQueueService: EmailQueueService,
     private readonly emailTemplateService: EmailTemplateService,
+    private readonly alertingService: AlertingService,
   ) {}
 
   onModuleInit() {
@@ -40,6 +42,10 @@ export class DebtReminderService implements OnModuleInit, OnModuleDestroy {
       this.sendDueDebtEmails().catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err);
         this.logger.error(`Debt reminder run failed: ${message}`);
+        void this.alertingService.notifyError(
+          'Debt reminder run failed',
+          message,
+        );
       });
     }, intervalMs);
 

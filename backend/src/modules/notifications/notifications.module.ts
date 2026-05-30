@@ -7,6 +7,8 @@ import { EmailTemplateService } from './email-template.service';
 import { PushService } from './push.service';
 import { UserPushToken } from './entities/user-push-token.entity';
 import { NotificationsController } from './notifications.controller';
+import { DiscordAlertService } from './discord-alert.service';
+import { AlertingService } from './alerting.service';
 
 @Module({
   imports: [ConfigModule, TypeOrmModule.forFeature([UserPushToken])],
@@ -16,7 +18,16 @@ import { NotificationsController } from './notifications.controller';
     EmailQueueService,
     EmailTemplateService,
     PushService,
+    DiscordAlertService,
+    AlertingService,
   ],
-  exports: [EmailService, EmailQueueService, EmailTemplateService, PushService],
+  exports: [
+    EmailService,
+    EmailQueueService,
+    EmailTemplateService,
+    PushService,
+    DiscordAlertService,
+    AlertingService,
+  ],
 })
 export class NotificationsModule {}
