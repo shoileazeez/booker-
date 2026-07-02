@@ -180,3 +180,43 @@ Cross-module coupling to know:
 **`src/services/offlineStore.js` is a legacy re-export shim.** The canonical implementation is `src/storage/offlineStore.js`. `src/services/offlineStore.js` only re-exports a subset of cache helpers for backward import-path compatibility — do not add logic there.
 
 **`ReceiptService`** lives inside `TransactionsModule` and handles PDF receipt generation (using pdfkit + AWS S3 via `aws-sdk`).
+
+## RevenueCat subscription management
+
+**Frontend RevenueCat integration** is in the `RevenueCatProvider` (`src/context/RevenueCatContext.js`), wrapping `App.js` between `ThemeProvider` and `WorkspaceProvider`. The SDK wrapper lives in `src/services/revenuecat.js`.
+
+User identity sync:
+- `RevenueCatUserBridge` (in `App.js`) calls `revenuecat.login(user.id)` when a user authenticates, and `logout()` when they sign out.
+- The bridge sits inside `RevenueCatProvider` and uses `useAuth()` + `useRevenueCat()` hooks.
+
+Product & entitlement mapping (`src/services/revenuecat.js`):
+- `PRODUCT_IDS` — maps to store product identifiers (e.g. `bizrecord_pro_yearly`, `bizrecord_addon_workspace_monthly`).
+- `PRODUCT_META` — maps each product ID to its metadata (entitlement, type, billingCycle, plan, addonType).
+- `ENTITLEMENTS` — RevenueCat entitlement IDs (`bizrecord_pro`, `bizrecord_basic`, `bizrecord_addon_workspace`, etc.).
+- Helpers: `getPlanProductId(plan, cycle)`, `getAddonProductId(addonType, cycle)`, `getProductMeta(productId)`.
+
+Purchase flow:
+- `useRevenueCat().purchasePackage(pkg)` → wraps `Purchases.purchasePackage`, updates customer info state.
+- `useRevenueCat().restorePurchases()` → wraps `Purchases.restorePurchases`.
+- `useRevenueCat().syncPurchases()` → wraps `Purchases.syncPurchases`.
+
+Paywall UI is available in two forms:
+1. Custom paywall: `src/screens/billing/PaywallScreen.js` — renders offerings from `useRevenueCat().offerings`.
+2. Native paywall: `useRevenueCat().showPaywall()` or `showPaywallIfNeeded('bizrecord_pro')`.
+
+Customer Center: `src/screens/billing/CustomerCenterScreen.js` renders `<RevenueCatCustomerCenter>` from `react-native-purchases-ui`. Navigation targets `'CustomerCenter'` route in `MainTabs`.
+
+**Backend RevenueCat integration** is in `RevenueCatWebhookService` (`backend/src/modules/billing/revenuecat.service.ts`):
+- Endpoint: `POST /billing/webhook/revenuecat`
+- Handles events: `INITIAL_PURCHASE`, `RENEWAL`, `CANCELLATION`, `EXPIRATION`, `TRIAL_STARTED`, `TRIAL_CONVERSION`, `UNCANCELLATION`, `BILLING_ISSUE`, `NON_RENEWING_PURCHASE`.
+- Updates `Subscription` and `Payment` records, sends push notifications and emails.
+- Supports webhook auth via `REVENUECAT_WEBHOOK_SECRET` env var (shared secret or HMAC).
+
+**New environment variables needed:**
+- `REVENUECAT_WEBHOOK_SECRET` — RevenueCat webhook shared secret (for server-side verification).
+- `REVENUECAT_WEBHOOK_AUTH_DISABLED` — set to `true` in dev to skip webhook auth.
+- RevenueCat API key is hardcoded in `src/services/revenuecat.js` for the test key; in production, move to `EXPO_PUBLIC_REVENUECAT_API_KEY` env var.
+
+**Migration from react-native-iap:**
+- Old `src/services/googleBilling.js` and `billingConfig.js` remain but the new `SubscriptionScreen.js` no longer imports them — it uses `useRevenueCat()` instead.
+- The backend still supports the `POST /billing/verify/google` and `POST /billing/webhook/google` endpoints for legacy Google Play purchases alongside the new `POST /billing/webhook/revenuecat` endpoint.

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
+import { RevenueCatWebhookService } from './revenuecat.service';
 import { User } from '../auth/entities/user.entity';
 import { Workspace } from '../workspace/entities/workspace.entity';
 import { Subscription } from './entities/subscription.entity';
@@ -21,7 +22,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     NotificationsModule,
   ],
   controllers: [BillingController],
-  providers: [BillingService],
-  exports: [BillingService],
+  providers: [BillingService, RevenueCatWebhookService],
+  exports: [BillingService, RevenueCatWebhookService],
 })
 export class BillingModule {}

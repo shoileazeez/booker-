@@ -10,6 +10,7 @@ import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { CustomerModule } from './modules/customer/customer.module';
+import { BillingModule } from './modules/billing/billing.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { CustomerModule } from './modules/customer/customer.module';
     InventoryModule,
     TransactionsModule,
     CustomerModule,
+    BillingModule,
   ],
   controllers: [AppController, PublicController],
   providers: [AppService],

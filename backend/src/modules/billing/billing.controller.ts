@@ -7,16 +7,21 @@ import {
   Body,
   Headers,
   Param,
+  Req,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { BillingService } from './billing.service';
+import { RevenueCatWebhookService } from './revenuecat.service';
 import { InitiateCheckoutDto } from './dto/initiate-checkout.dto';
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
 import { VerifyGooglePurchaseDto } from './dto/verify-google-purchase.dto';
 
 @Controller('billing')
 export class BillingController {
-  constructor(private billingService: BillingService) {}
+  constructor(
+    private billingService: BillingService,
+    private revenuecatWebhookService: RevenueCatWebhookService,
+  ) {}
 
   @UseGuards(JwtAuthGuard)
   @Get('plans')
@@ -113,5 +118,19 @@ export class BillingController {
       authorization,
       sharedSecret: googleWebhookSecret || webhookSecret,
     });
+  }
+
+  @Post('webhook/revenuecat')
+  async revenuecatWebhook(
+    @Req() req: any,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-revenuecat-signature') revenuecatSignature?: string,
+  ) {
+    const rawBody = req.rawBody || JSON.stringify(req.body);
+    return this.revenuecatWebhookService.handleWebhook(
+      rawBody,
+      revenuecatSignature,
+      authorization,
+    );
   }
 }

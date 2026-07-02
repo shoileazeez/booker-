@@ -11,6 +11,7 @@ import ReAuthStack from './src/navigation/ReAuthStack';
 import WorkspaceSetupScreen from './src/screens/workspace/WorkspaceSetupScreen';
 import WorkspaceInvitesScreen from './src/screens/workspace/WorkspaceInvitesScreen';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { RevenueCatProvider } from './src/context/RevenueCatContext';
 import { CustomerSelectProvider } from './src/context/CustomerSelectContext';
 import { initDb } from './src/storage/sqlite';
 import { api } from './src/api/client';
@@ -18,6 +19,21 @@ import { initializeNotificationInbox } from './src/services/notificationInbox';
 import { ensurePushChannel } from './src/services/pushNotifications';
 
 const Stack = createNativeStackNavigator();
+
+function RevenueCatUserBridge() {
+  const { user } = useAuth();
+  const { configure, login, logout } = useRevenueCat();
+
+  useEffect(() => {
+    if (user?.id) {
+      configure(user.id);
+    } else {
+      logout();
+    }
+  }, [user?.id]);
+
+  return null;
+}
 
 function RootNavigator() {
   const { user, loading, requiresReAuth } = useAuth();
@@ -100,13 +116,16 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <ThemeProvider>
-          <WorkspaceProvider>
-            <CustomerSelectProvider>
+          <RevenueCatProvider>
+            <WorkspaceProvider>
+              <CustomerSelectProvider>
+              <RevenueCatUserBridge />
               <NavigationContainer>
                 <RootNavigator />
               </NavigationContainer>
-            </CustomerSelectProvider>
-          </WorkspaceProvider>
+              </CustomerSelectProvider>
+            </WorkspaceProvider>
+          </RevenueCatProvider>
         </ThemeProvider>
       </AuthProvider>
     </SafeAreaProvider>

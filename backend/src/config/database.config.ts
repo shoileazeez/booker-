@@ -24,8 +24,10 @@ import { UserPushToken } from '../modules/notifications/entities/user-push-token
 //   is explicitly accepted).
 function buildSslOption() {
   if (process.env.DB_SSL !== 'true') return false;
-  const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false';
-  return { rejectUnauthorized };
+
+  return {
+    rejectUnauthorized: false,
+  };
 }
 
 export const databaseConfig = (): TypeOrmModuleOptions => {

@@ -1,5 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,30 +7,19 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { Platform } from 'react-native';
-import * as GoogleBilling from '../../services/googleBilling';
 import { useTheme } from '../../theme/ThemeContext';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import { useRevenueCat } from '../../context/RevenueCatContext';
 import { useAuth } from '../../context/AuthContext';
 import { Card, AppButton, Title } from '../../components/UI';
 import { api } from '../../api/client';
 import * as offlineStore from '../../storage/offlineStore';
-import {
-  getAndroidPackageName,
-  getAddonSkuMap,
-  getBillingSkuMap,
-  resolveAddonSku,
-  resolveSubscriptionSku,
-} from '../../services/billingConfig';
+import { ENTITLEMENTS, PRODUCT_IDS, getProductMeta, getPlanProductId } from '../../services/revenuecat';
 
 const PLAN_ORDER = ['basic', 'pro'];
-const PLAY_PRICE_MARKUP = 1.075;
-const LAST_PURCHASE_TOKEN_STORAGE_KEY = 'lastPurchaseToken';
-const PENDING_PURCHASE_FINISH_STORAGE_KEY = 'pendingGooglePurchaseFinish';
-// Match the client.js offline detection: only if NO response (true offline)
-const isLikelyOfflineError = (err) => !err?.response;
 const DEFAULT_ADDONS = {
   workspaceSlot: { monthly: 1500, yearly: Math.round(1500 * 12 * 0.8) },
   staffSeat: { monthly: 500, yearly: Math.round(500 * 12 * 0.8) },
@@ -39,10 +27,7 @@ const DEFAULT_ADDONS = {
 };
 
 function normalizePlansResponse(payload) {
-  if (payload?.basic || payload?.pro) {
-    return payload;
-  }
-
+  if (payload?.basic || payload?.pro) return payload;
   const normalized = {};
   for (const plan of payload?.plans || []) {
     normalized[plan.key] = {
@@ -53,7 +38,6 @@ function normalizePlansResponse(payload) {
       addons: DEFAULT_ADDONS,
     };
   }
-
   return {
     basic: normalized.basic || {
       pricing: { monthly: 2500, yearly: Math.round(2500 * 12 * 0.8) },
@@ -66,35 +50,13 @@ function normalizePlansResponse(payload) {
   };
 }
 
-function getPurchaseToken(purchase) {
-  return GoogleBilling.extractPurchaseToken(purchase);
-}
-
-function getPurchaseProductId(purchase, fallback = '') {
-  return (
-    purchase?.productId ||
-    purchase?.productIds?.[0] ||
-    purchase?.products?.[0] ||
-    fallback
-  );
-}
-
 function getTrialDaysLeft(subscription) {
-  if (!subscription?.trialEndsAt) {
-    return 0;
-  }
-
+  if (!subscription?.trialEndsAt) return 0;
   const diffMs = new Date(subscription.trialEndsAt).getTime() - Date.now();
-  if (diffMs <= 0) {
-    return 0;
-  }
-
-  return Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+  return diffMs <= 0 ? 0 : Math.ceil(diffMs / (24 * 60 * 60 * 1000));
 }
 
-function applyPlayMarkup(amount) {
-  return Math.round(Number(amount || 0) * PLAY_PRICE_MARKUP);
-}
+const isLikelyOfflineError = (err) => !err?.response;
 
 export default function SubscriptionScreen({ navigation }) {
   const { theme } = useTheme();
@@ -102,7 +64,6 @@ export default function SubscriptionScreen({ navigation }) {
   const [subscription, setSubscription] = useState(null);
   const [usage, setUsage] = useState(null);
   const [workspaceBilling, setWorkspaceBilling] = useState(null);
-  const [playProducts, setPlayProducts] = useState({});
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState('pro');
@@ -112,18 +73,14 @@ export default function SubscriptionScreen({ navigation }) {
     staffSeat: false,
     whatsappBundle: false,
   });
-  const [lastReference, setLastReference] = useState(null);
   const [onlineRequired, setOnlineRequired] = useState(false);
   const [showAddonModal, setShowAddonModal] = useState(false);
   const [processingAddon, setProcessingAddon] = useState(false);
-  const currentWorkspaceIdRef = useRef(null);
-  const processedTokensRef = useRef(new Set());
-  const processingTokensRef = useRef(new Set());
-  const handlePurchaseRef = useRef(null);
-  const handleRecoveredPurchasesRef = useRef(null);
 
   const workspace = useWorkspace();
   const { user, setPauseAutoLock } = useAuth();
+  const revenuecat = useRevenueCat();
+
   const currentWorkspace =
     workspace.currentWorkspace ||
     workspace.workspaces.find((w) => w.id === workspace.currentWorkspaceId);
@@ -134,240 +91,42 @@ export default function SubscriptionScreen({ navigation }) {
   const workspaceCount = workspace.workspaces?.length || 0;
   const trialDaysLeft = getTrialDaysLeft(subscription);
 
-  const getPurchaseVerificationMeta = (purchase) => {
-    const productId = getPurchaseProductId(purchase);
-    const addonSkus = getAddonSkuMap();
-    let purchaseType = 'subscription';
-    let purchaseKind;
-    let purchaseBillingCycle;
+  const currentOffering = revenuecat.offerings?.current || null;
+  const packages = currentOffering?.availablePackages || [];
 
-    if (Object.values(addonSkus).includes(productId)) {
-      purchaseType = 'product';
-      purchaseBillingCycle = productId.includes('yearly') ? 'yearly' : 'monthly';
-
-      if (productId === addonSkus.workspace_monthly || productId === addonSkus.workspace_yearly) {
-        purchaseKind = 'addon_workspace_slot';
-      } else if (productId === addonSkus.staff_monthly || productId === addonSkus.staff_yearly) {
-        purchaseKind = 'addon_staff_seat';
-      } else if (productId === addonSkus.whatsapp_monthly || productId === addonSkus.whatsapp_yearly) {
-        purchaseKind = 'addon_whatsapp_bundle_100';
-      }
-    }
-
-    return { productId, purchaseType, purchaseKind, purchaseBillingCycle };
-  };
-
-  const isCompletedAndroidPurchase = (purchase) => {
-    if (!purchase?.purchaseToken) {
-      return false;
-    }
-
-    if (
-      Platform.OS === 'android' &&
-      typeof purchase?.purchaseStateAndroid === 'number' &&
-      purchase.purchaseStateAndroid !== 0
-    ) {
-      return false;
-    }
-
-    return true;
-  };
-
-  useEffect(() => {
-    let mounted = true;
-
-    const loadLastPurchaseToken = async () => {
-      try {
-        const storedToken = await AsyncStorage.getItem(LAST_PURCHASE_TOKEN_STORAGE_KEY);
-        if (mounted && storedToken) {
-          setLastReference(storedToken);
-        }
-      } catch {
-        // ignore storage read errors
-      }
-    };
-
-    loadLastPurchaseToken();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    currentWorkspaceIdRef.current = currentWorkspace?.id || null;
-  }, [currentWorkspace?.id]);
-
-  const loadPlayProducts = async () => {
-    if (Platform.OS !== 'android' || !GoogleBilling.isAvailable()) {
-      setPlayProducts({});
-      return;
-    }
-
-    try {
-      const subscriptionSkus = Object.values(getBillingSkuMap());
-      const addonSkus = Object.values(getAddonSkuMap());
-      const [subscriptionProducts, addonProducts] = await Promise.all([
-        GoogleBilling.getSkuDetails(subscriptionSkus),
-        GoogleBilling.getProductDetails(addonSkus, 'in-app'),
-      ]);
-      const products = [...subscriptionProducts, ...addonProducts];
-      const next = {};
-      for (const product of products) {
-        const productId = getPurchaseProductId(product);
-        if (!productId) continue;
-        next[productId] = product;
-      }
-      setPlayProducts(next);
-    } catch (error) {
-      setPlayProducts({});
-    }
-  };
-
-  const handleRecoveredPurchases = async (
-    purchases,
-    { acknowledge = true, showSuccessAlert = false } = {},
-  ) => {
-    const validPurchases = purchases.filter(isCompletedAndroidPurchase);
-
-    for (const purchase of validPurchases) {
-      try {
-        await handlePurchase(purchase, { acknowledge, showSuccessAlert });
-      } catch (err) {
-        console.error('Failed to process recovered Google Play purchase:', err);
-      }
-    }
-  };
-
-  const finalizePurchase = async (purchase, purchaseType) => {
-    const token = getPurchaseToken(purchase);
-    const isConsumable = purchaseType === 'product';
-
-    await AsyncStorage.setItem(
-      PENDING_PURCHASE_FINISH_STORAGE_KEY,
-      JSON.stringify({
-        token,
-        isConsumable,
-      }),
-    );
-
-    try {
-      await GoogleBilling.acknowledgePurchase(purchase, {
-        isConsumable,
-      });
-    } finally {
-      const pendingFinishRaw = await AsyncStorage.getItem(
-        PENDING_PURCHASE_FINISH_STORAGE_KEY,
-      );
-      const pendingFinish = pendingFinishRaw ? JSON.parse(pendingFinishRaw) : null;
-      if (pendingFinish?.token === token) {
-        await AsyncStorage.removeItem(PENDING_PURCHASE_FINISH_STORAGE_KEY);
-      }
-    }
-  };
-
-  const handlePurchase = async (
-    purchase,
-    { acknowledge = true, showSuccessAlert = true } = {},
-  ) => {
-    const token = getPurchaseToken(purchase);
-
-    if (!token) {
-      console.warn('Missing Google Play purchase token:', purchase);
-      return false;
-    }
-
-    if (!isCompletedAndroidPurchase(purchase)) {
-      console.log('Purchase not completed yet:', purchase.purchaseStateAndroid, purchase);
-      return false;
-    }
-
-    if (processedTokensRef.current.has(token) || processingTokensRef.current.has(token)) {
-      return false;
-    }
-
-    processingTokensRef.current.add(token);
-    setLastReference(token);
-
-    try {
-      await AsyncStorage.setItem(LAST_PURCHASE_TOKEN_STORAGE_KEY, token);
-
-      const packageName = getAndroidPackageName();
-      const { productId, purchaseType, purchaseKind, purchaseBillingCycle } =
-        getPurchaseVerificationMeta(purchase);
-
-      const result = await api.post('/billing/verify/google', {
-        packageName,
-        productId,
-        purchaseToken: token,
-        purchaseType,
-        ...(purchaseType === 'product' && {
-          purchaseKind,
-          billingCycle: purchaseBillingCycle,
-        }),
-        workspaceId: currentWorkspaceIdRef.current,
-      });
-
-      if (!result?.verified) {
-        throw new Error(result?.error || 'Google Play verification failed.');
-      }
-
-      await AsyncStorage.setItem(LAST_PURCHASE_TOKEN_STORAGE_KEY, token);
-      await refreshBilling();
-
-      if (acknowledge) {
-        await finalizePurchase(purchase, purchaseType);
-      }
-
-      if (showSuccessAlert) {
-        Alert.alert(
-          'Success',
-          purchaseType === 'product' ? 'Add-on activated' : 'Subscription activated',
-        );
-      }
-
-      processingTokensRef.current.delete(token);
-      processedTokensRef.current.add(token);
-      return true;
-    } catch (err) {
-      processingTokensRef.current.delete(token);
-      console.error('Google Play verification failed:', err);
-      throw err;
-    }
-  };
-
-  handlePurchaseRef.current = handlePurchase;
-  handleRecoveredPurchasesRef.current = handleRecoveredPurchases;
+  const selectedPackage = useMemo(() => {
+    const targetId = getPlanProductId(selectedPlan, billingCycle);
+    return packages.find((p) => p.product?.identifier === targetId)
+      || packages.find((p) => {
+        const meta = getProductMeta(p.product?.identifier);
+        return meta?.plan === selectedPlan && meta?.billingCycle === billingCycle;
+      })
+      || null;
+  }, [packages, selectedPlan, billingCycle]);
 
   const refreshBilling = async () => {
-    // If no current workspace, fetch user-level subscription and global plans
     let workspaceId = currentWorkspace?.id;
-    
     try {
       const [plansResp, subRes] = await Promise.all([
         api.get('/billing/plans'),
-        workspaceId 
+        workspaceId
           ? api.get(`/billing/workspaces/${workspaceId}/context`)
-          : api.get('/billing/subscription'), // Get user-level subscription if no workspace
+          : api.get('/billing/subscription'),
       ]);
       const normalizedPlans = normalizePlansResponse(plansResp);
       setOnlineRequired(false);
       setPlans(normalizedPlans);
-      
-      // For workspace context, use the fetched workspace billing
-      // For user context, use subscription directly
+
       const billingCtx = workspaceId ? subRes : (subRes ? { plan: subRes.plan, billingCycle: subRes.billingCycle || 'monthly', ...subRes } : {});
-      
       setSubscription(billingCtx);
       setWorkspaceBilling(billingCtx);
       setUsage({
-        whatsappMessagesUsedThisMonth:
-          billingCtx?.usage?.whatsappMessagesUsedThisMonth ?? 0,
+        whatsappMessagesUsedThisMonth: billingCtx?.usage?.whatsappMessagesUsedThisMonth ?? 0,
         limits: billingCtx?.limits || {},
       });
       setSelectedPlan(billingCtx?.plan || 'pro');
       setBillingCycle(billingCtx?.billingCycle || 'monthly');
-      
+
       if (workspaceId) {
         try {
           await offlineStore.cacheBillingContext(workspaceId, billingCtx);
@@ -375,30 +134,13 @@ export default function SubscriptionScreen({ navigation }) {
           // ignore cache errors
         }
       }
-      await loadPlayProducts();
     } catch (err) {
       throw err;
     }
   };
 
-  const retryBillingLoad = async () => {
-    try {
-      setLoading(true);
-      await refreshBilling();
-    } catch (err) {
-      if (isLikelyOfflineError(err)) {
-        setOnlineRequired(true);
-        return;
-      }
-      Alert.alert('Billing', err?.message || 'Unable to load billing details.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     let mounted = true;
-
     const run = async () => {
       setLoading(true);
       try {
@@ -414,60 +156,12 @@ export default function SubscriptionScreen({ navigation }) {
         if (mounted) setLoading(false);
       }
     };
-
     run();
-
-    return () => {
-      mounted = false;
-    };
-
+    return () => { mounted = false; };
   }, [currentWorkspace?.id]);
 
   useEffect(() => {
-    if (!GoogleBilling.isAvailable()) {
-      return undefined;
-    }
-
-    let active = true;
-
-    const initializeGoogleBilling = async () => {
-      try {
-        await GoogleBilling.initPurchaseListeners(
-          async (purchase) => {
-            await handlePurchaseRef.current?.(purchase);
-          },
-          (error) => {
-            Alert.alert('Purchase failed', error?.message);
-          },
-        );
-
-        const purchases = await GoogleBilling.restorePurchases();
-        if (!active) {
-          return;
-        }
-
-        await handleRecoveredPurchasesRef.current?.(purchases, {
-          acknowledge: true,
-          showSuccessAlert: false,
-        });
-      } catch (err) {
-        console.error('Failed to initialize Google Billing:', err);
-      }
-    };
-
-    initializeGoogleBilling();
-
-    return () => {
-      active = false;
-      GoogleBilling.removeListeners();
-      GoogleBilling.disconnect().catch(() => null);
-    };
-  }, []);
-
-  // When screen regains focus (e.g., after purchase), refresh subscription
-  useEffect(() => {
     if (!navigation) return;
-
     const unsubscribe = navigation.addListener('focus', async () => {
       try {
         await refreshBilling();
@@ -475,7 +169,6 @@ export default function SubscriptionScreen({ navigation }) {
         console.error('Failed to refresh billing after focus:', err);
       }
     });
-
     return unsubscribe;
   }, [navigation, currentWorkspace?.id]);
 
@@ -489,137 +182,107 @@ export default function SubscriptionScreen({ navigation }) {
       : selectedPlan === 'pro'
         ? plans?.pro?.pricing?.monthly || 7000
         : plans?.basic?.pricing?.monthly || 2500;
-
-    return applyPlayMarkup(planPrice);
+    return planPrice;
   }, [plans, selectedPlan, billingCycle]);
 
+  const startCheckout = async () => {
+    if (!selectedPackage) {
+      Alert.alert('Not available', 'Selected plan is not available for purchase right now.');
+      return;
+    }
+    setProcessing(true);
+    setPauseAutoLock(true);
+    try {
+      const result = await revenuecat.purchasePackage(selectedPackage);
+      if (result.success) {
+        await refreshBilling();
+        Alert.alert('Success', 'Subscription activated!');
+      } else if (!result.cancelled) {
+        Alert.alert('Purchase failed', result.error || 'An error occurred.');
+      }
+    } finally {
+      setProcessing(false);
+      setPauseAutoLock(false);
+    }
+  };
+
+  const startAddonCheckout = async () => {
+    setProcessingAddon(true);
+    setPauseAutoLock(true);
+    try {
+      const addonTypes = Object.entries(selectedAddons)
+        .filter(([, selected]) => selected)
+        .map(([key]) => key);
+
+      for (const addonType of addonTypes) {
+        const addonProductId = addonType === 'workspaceSlot'
+          ? (billingCycle === 'yearly' ? PRODUCT_IDS.ADDON_WORKSPACE_YEARLY : PRODUCT_IDS.ADDON_WORKSPACE_MONTHLY)
+          : addonType === 'staffSeat'
+            ? (billingCycle === 'yearly' ? PRODUCT_IDS.ADDON_STAFF_YEARLY : PRODUCT_IDS.ADDON_STAFF_MONTHLY)
+            : (billingCycle === 'yearly' ? PRODUCT_IDS.ADDON_WHATSAPP100_YEARLY : PRODUCT_IDS.ADDON_WHATSAPP100_MONTHLY);
+
+        const pkg = packages.find((p) => p.product?.identifier === addonProductId);
+        if (!pkg) {
+          Alert.alert('Not available', `Add-on ${addonType} is not available right now.`);
+          continue;
+        }
+
+        const result = await revenuecat.purchasePackage(pkg);
+        if (!result.success && !result.cancelled) {
+          Alert.alert('Purchase failed', `Failed to purchase ${addonType}: ${result.error}`);
+          break;
+        }
+      }
+
+      await refreshBilling();
+      setSelectedAddons({ workspaceSlot: false, staffSeat: false, whatsappBundle: false });
+      setShowAddonModal(false);
+      Alert.alert('Add-ons processed', 'Your add-on purchases have been processed.');
+    } finally {
+      setProcessingAddon(false);
+      setPauseAutoLock(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    setProcessing(true);
+    setPauseAutoLock(true);
+    try {
+      const result = await revenuecat.restorePurchases();
+      if (result.success) {
+        await refreshBilling();
+        Alert.alert('Restored', 'Your purchases have been restored.');
+      } else {
+        Alert.alert('Restore failed', result.error || 'No purchases found to restore.');
+      }
+    } finally {
+      setProcessing(false);
+      setPauseAutoLock(false);
+    }
+  };
+
+  const handleShowCustomerCenter = () => {
+    navigation?.navigate('CustomerCenter');
+  };
+
   const toggleAddon = (key) => {
-    setSelectedAddons((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+    setSelectedAddons((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const notifyOwner = async () => {
     if (!currentWorkspace?.id) return;
     if (onlineRequired) {
-      Alert.alert(
-        'Internet required',
-        'Connect to the internet to send a renewal reminder to the workspace owner.',
-      );
-      return;
-    }
-
-    try {
-      setProcessing(true);
-      await api.post(
-        `/billing/workspaces/${currentWorkspace.id}/remind-owner`,
-        {},
-      );
-      Alert.alert(
-        'Reminder sent',
-        'We emailed the workspace owner to renew this subscription.',
-      );
-    } catch (err) {
-      Alert.alert(
-        'Unable to send reminder',
-        err?.message || 'Please try again later.',
-      );
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  const startCheckout = async () => {
-    Alert.alert(
-      'Free Testing Mode',
-      'Billing is disabled for early testing. All features are available to everyone.'
-    );
-  };
-
-  const startAddonCheckout = async () => {
-    Alert.alert(
-      'Free Testing Mode',
-      'Billing is disabled for early testing. All features are available to everyone.'
-    );
-  };
-
-  const verifyPayment = async () => {
-    if (onlineRequired) {
-      Alert.alert(
-        'Internet required',
-        'Billing requires internet connection. Come online to verify payment.',
-      );
+      Alert.alert('Internet required', 'Connect to the internet to send a renewal reminder.');
       return;
     }
     try {
       setProcessing(true);
-      // Pause auto-lock while calling restorePurchases (may take time)
-      setPauseAutoLock(true);
-      const persistedReference =
-        lastReference || (await AsyncStorage.getItem(LAST_PURCHASE_TOKEN_STORAGE_KEY));
-
-      if (Platform.OS !== 'android' || !GoogleBilling.isAvailable()) {
-        throw new Error(
-          'Google Play Billing verification is only available on Android builds.',
-        );
-      }
-
-      const preferredSku = resolveSubscriptionSku(selectedPlan, billingCycle);
-      const purchases = (await GoogleBilling.restorePurchases()).filter(
-        isCompletedAndroidPurchase,
-      );
-
-      if (!purchases.length && !persistedReference) {
-        Alert.alert(
-          'Verification',
-          'No recent Google Play purchase was found yet. Start checkout first.',
-        );
-        return;
-      }
-
-      const matchedPurchase =
-        purchases.find((purchase) => getPurchaseProductId(purchase) === preferredSku) ||
-        purchases.find(
-          (purchase) =>
-            persistedReference && getPurchaseToken(purchase) === persistedReference,
-        ) ||
-        purchases[0];
-
-      if (!matchedPurchase) {
-        throw new Error('No Google Play subscription purchase was found to verify.');
-      }
-
-      if (persistedReference) {
-        setLastReference(persistedReference);
-        await AsyncStorage.setItem(LAST_PURCHASE_TOKEN_STORAGE_KEY, persistedReference);
-      }
-
-      const matchedProductId = getPurchaseProductId(matchedPurchase, preferredSku);
-      await handlePurchase(
-        {
-          ...matchedPurchase,
-          productId: matchedProductId,
-        },
-        {
-          acknowledge: true,
-          showSuccessAlert: false,
-        },
-      );
-
-      Alert.alert('Success', 'Subscription verified and updated from Google Play.');
+      await api.post(`/billing/workspaces/${currentWorkspace.id}/remind-owner`, {});
+      Alert.alert('Reminder sent', 'We emailed the workspace owner to renew this subscription.');
     } catch (err) {
-      if (isLikelyOfflineError(err)) {
-        setOnlineRequired(true);
-      }
-      Alert.alert(
-        'Verification failed',
-        err?.message || 'Unable to verify payment now.',
-      );
+      Alert.alert('Unable to send reminder', err?.message || 'Please try again later.');
     } finally {
       setProcessing(false);
-      // Re-enable auto-lock after payment verification completes
-      setPauseAutoLock(false);
     }
   };
 
@@ -633,26 +296,23 @@ export default function SubscriptionScreen({ navigation }) {
 
   if (onlineRequired) {
     return (
-      <View
-        style={[
-          styles.center,
-          { backgroundColor: theme.colors.background, padding: 16 },
-        ]}
-      >
+      <View style={[styles.center, { backgroundColor: theme.colors.background, padding: 16 }]}>
         <Card style={{ width: '100%', maxWidth: 520 }}>
           <Title>Subscription & Billing</Title>
-          <Text
-            style={[
-              styles.onlineRequiredText,
-              { color: theme.colors.textSecondary },
-            ]}
-          >
-            Billing is online-only. Connect to the internet to renew, upgrade,
-            verify payment, or view live usage for this workspace.
+          <Text style={[styles.onlineRequiredText, { color: theme.colors.textSecondary }]}>
+            Billing is online-only. Connect to the internet to renew, upgrade, verify payment, or view live usage for this workspace.
           </Text>
           <AppButton
             title="Try Again"
-            onPress={retryBillingLoad}
+            onPress={async () => {
+              setLoading(true);
+              try {
+                await refreshBilling();
+              } catch {
+                setOnlineRequired(true);
+              }
+              setLoading(false);
+            }}
             style={{ marginTop: 12 }}
           />
           <AppButton
@@ -666,6 +326,9 @@ export default function SubscriptionScreen({ navigation }) {
     );
   }
 
+  const selectedPrice = selectedPackage?.product?.priceString
+    || (totalAmount ? `NGN ${totalAmount.toLocaleString()}` : '');
+
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
@@ -674,57 +337,37 @@ export default function SubscriptionScreen({ navigation }) {
       <View style={styles.headerRow}>
         <Title>Subscription & Billing</Title>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <MaterialIcons
-            name="close"
-            size={22}
-            color={theme.colors.textPrimary}
-          />
+          <MaterialIcons name="close" size={22} color={theme.colors.textPrimary} />
         </TouchableOpacity>
       </View>
 
       <Card>
-        <Text
-          style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}
-        >
-          Current status
-        </Text>
-        {subscription?.currentPeriodEndsAt ? (
-          <>
-            <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
-              Plan: {(subscription?.plan || 'basic').toUpperCase()}
-            </Text>
-            <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
-              Status: {(subscription?.status || 'active').toUpperCase()}
-            </Text>
-            <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
-              Billing cycle: {(subscription?.billingCycle || billingCycle).toUpperCase()}
-            </Text>
-            {subscription?.status === 'trialing' && (
-              <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
-                Trial days left: {trialDaysLeft}
-              </Text>
-            )}
-            <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
-              Renews / ends:{' '}
-              {new Date(subscription.currentPeriodEndsAt).toLocaleDateString()}
-            </Text>
-            <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
-              Workspace usage: {workspaceCount}/{usage?.limits?.workspaceLimit ?? 0}
-            </Text>
-          </>
+        <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Current status</Text>
+        {revenuecat.isPro ? (
+          <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
+            BizRecord Pro is active. {subscription?.currentPeriodEndsAt ? `Renews ${new Date(subscription.currentPeriodEndsAt).toLocaleDateString()}` : ''}
+          </Text>
+        ) : revenuecat.isBasic ? (
+          <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
+            Basic plan is active.
+          </Text>
         ) : (
           <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
             No active subscription. Select a plan below to get started.
           </Text>
         )}
+        {subscription?.currentPeriodEndsAt && (
+          <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
+            Renews / ends: {new Date(subscription.currentPeriodEndsAt).toLocaleDateString()}
+          </Text>
+        )}
+        <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
+          Workspace usage: {workspaceCount}/{usage?.limits?.workspaceLimit ?? 0}
+        </Text>
       </Card>
 
       <Card>
-        <Text
-          style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}
-        >
-          Choose plan
-        </Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Choose plan</Text>
         <View style={styles.cycleSwitcher}>
           {['monthly', 'yearly'].map((cycle) => {
             const active = billingCycle === cycle;
@@ -734,23 +377,13 @@ export default function SubscriptionScreen({ navigation }) {
                 style={[
                   styles.cycleChip,
                   {
-                    backgroundColor: active
-                      ? theme.colors.primary
-                      : 'transparent',
-                    borderColor: active
-                      ? theme.colors.primary
-                      : theme.colors.border,
+                    backgroundColor: active ? theme.colors.primary : 'transparent',
+                    borderColor: active ? theme.colors.primary : theme.colors.border,
                   },
                 ]}
                 onPress={() => setBillingCycle(cycle)}
               >
-                <Text
-                  style={{
-                    color: active ? '#fff' : theme.colors.textPrimary,
-                    fontWeight: '700',
-                    fontSize: 12,
-                  }}
-                >
+                <Text style={{ color: active ? '#fff' : theme.colors.textPrimary, fontWeight: '700', fontSize: 12 }}>
                   {cycle === 'yearly' ? 'Yearly (20% off)' : 'Monthly'}
                 </Text>
               </TouchableOpacity>
@@ -760,23 +393,17 @@ export default function SubscriptionScreen({ navigation }) {
 
         {PLAN_ORDER.map((planKey) => {
           const active = selectedPlan === planKey;
-          const basePrice =
-            billingCycle === 'yearly'
-              ? planKey === 'pro'
-                ? plans?.pro?.pricing?.yearly || Math.round(7000 * 12 * 0.8)
-                : plans?.basic?.pricing?.yearly || Math.round(2500 * 12 * 0.8)
-              : planKey === 'pro'
-                ? plans?.pro?.pricing?.monthly || 7000
-                : plans?.basic?.pricing?.monthly || 2500;
-          const price = applyPlayMarkup(basePrice);
-          const sku = resolveSubscriptionSku(planKey, billingCycle);
-          const playProduct = playProducts[sku];
-          const playPrice =
-            playProduct?.displayPrice ||
-            playProduct?.localizedPrice ||
-            playProduct?.subscriptionOfferDetails?.[0]?.pricingPhases
-              ?.pricingPhaseList?.[0]?.formattedPrice ||
-            `NGN ${price.toLocaleString()}`;
+          const basePrice = billingCycle === 'yearly'
+            ? planKey === 'pro'
+              ? plans?.pro?.pricing?.yearly || Math.round(7000 * 12 * 0.8)
+              : plans?.basic?.pricing?.yearly || Math.round(2500 * 12 * 0.8)
+            : planKey === 'pro'
+              ? plans?.pro?.pricing?.monthly || 7000
+              : plans?.basic?.pricing?.monthly || 2500;
+
+          const targetId = getPlanProductId(planKey, billingCycle);
+          const pkg = packages.find((p) => p.product?.identifier === targetId);
+          const displayPrice = pkg?.product?.priceString || `NGN ${basePrice.toLocaleString()}`;
 
           return (
             <TouchableOpacity
@@ -784,34 +411,22 @@ export default function SubscriptionScreen({ navigation }) {
               style={[
                 styles.planItem,
                 {
-                  borderColor: active
-                    ? theme.colors.primary
-                    : theme.colors.border,
-                  backgroundColor: active
-                    ? `${theme.colors.primary}15`
-                    : 'transparent',
+                  borderColor: active ? theme.colors.primary : theme.colors.border,
+                  backgroundColor: active ? `${theme.colors.primary}15` : 'transparent',
                 },
               ]}
               onPress={() => setSelectedPlan(planKey)}
             >
               <View style={{ flex: 1 }}>
-                <Text
-                  style={[styles.planTitle, { color: theme.colors.textPrimary }]}
-                >
+                <Text style={[styles.planTitle, { color: theme.colors.textPrimary }]}>
                   {planKey.toUpperCase()}
                 </Text>
-                <Text
-                  style={[styles.planPrice, { color: theme.colors.textSecondary }]}
-                >
-                  {playPrice}/{billingCycle === 'yearly' ? 'year' : 'month'}
+                <Text style={[styles.planPrice, { color: theme.colors.textSecondary }]}>
+                  {displayPrice}/{billingCycle === 'yearly' ? 'year' : 'month'}
                 </Text>
               </View>
               {active ? (
-                <MaterialIcons
-                  name="check-circle"
-                  size={20}
-                  color={theme.colors.primary}
-                />
+                <MaterialIcons name="check-circle" size={20} color={theme.colors.primary} />
               ) : null}
             </TouchableOpacity>
           );
@@ -819,28 +434,14 @@ export default function SubscriptionScreen({ navigation }) {
       </Card>
 
       <Card>
-        <Text
-          style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}
-        >
-          Pro add-ons
-        </Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Pro add-ons</Text>
         {selectedPlan !== 'pro' ? (
-          <Text
-            style={[
-              styles.meta,
-              { color: theme.colors.textSecondary, marginBottom: 8 },
-            ]}
-          >
+          <Text style={[styles.meta, { color: theme.colors.textSecondary, marginBottom: 8 }]}>
             Upgrade to Pro plan to enable add-ons.
           </Text>
         ) : subscription?.status === 'trialing' && trialDaysLeft > 0 ? (
           <>
-            <Text
-              style={[
-                styles.meta,
-                { color: theme.colors.textSecondary, marginBottom: 12 },
-              ]}
-            >
+            <Text style={[styles.meta, { color: theme.colors.textSecondary, marginBottom: 12 }]}>
               Add extra capacity to your Pro subscription. Each add-on is a separate purchase.
             </Text>
             <AppButton
@@ -851,23 +452,14 @@ export default function SubscriptionScreen({ navigation }) {
             />
           </>
         ) : (
-          <Text
-            style={[
-              styles.meta,
-              { color: theme.colors.textSecondary, marginBottom: 8 },
-            ]}
-          >
+          <Text style={[styles.meta, { color: theme.colors.textSecondary, marginBottom: 8 }]}>
             Add-ons are available after purchasing a plan.
           </Text>
         )}
       </Card>
 
       <Card>
-        <Text
-          style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}
-        >
-          Usage dashboard
-        </Text>
+        <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Usage dashboard</Text>
         <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
           Workspace: {workspaceCount}/{usage?.limits?.workspaceLimit ?? 0}
         </Text>
@@ -875,91 +467,91 @@ export default function SubscriptionScreen({ navigation }) {
           Staff seats limit: {usage?.limits?.staffSeatLimit ?? 0}
         </Text>
         <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
-          WhatsApp: {usage?.whatsappMessagesUsedThisMonth ?? 0}/
-          {usage?.limits?.whatsappMonthlyQuota ?? 0}
+          WhatsApp: {usage?.whatsappMessagesUsedThisMonth ?? 0}/{usage?.limits?.whatsappMonthlyQuota ?? 0}
         </Text>
         {usage?.automationPaused ? (
-          <Text style={[styles.meta, { color: theme.colors.warning }]}>
-            Automation paused: {usage?.reason}
-          </Text>
+          <Text style={[styles.meta, { color: theme.colors.warning }]}>Automation paused: {usage?.reason}</Text>
         ) : null}
       </Card>
 
       <Card>
         <Text style={[styles.total, { color: theme.colors.textPrimary }]}>
-          Total: NGN {totalAmount.toLocaleString()} /{' '}
-          {billingCycle === 'yearly' ? 'year' : 'month'}
+          Total: {selectedPrice} / {billingCycle === 'yearly' ? 'year' : 'month'}
         </Text>
         <AppButton
-          title={
-            processing
-              ? 'Processing...'
-              : Platform.OS === 'android'
-                ? 'Buy with Google Play'
-                : 'Google Play required'
-          }
+          title={processing ? 'Processing...' : (selectedPackage ? 'Subscribe' : 'Not available')}
           icon="payments"
           onPress={startCheckout}
           loading={processing}
-          disabled={processing || !isWorkspaceOwner}
+          disabled={processing || !isWorkspaceOwner || !selectedPackage}
+        />
+        {!selectedPackage && (
+          <Text style={[styles.meta, { color: theme.colors.warning, marginTop: 4 }]}>
+            This plan is not currently available as an in-app purchase.
+          </Text>
+        )}
+        <AppButton
+          title="Restore purchases"
+          variant="secondary"
+          onPress={handleRestore}
+          disabled={processing}
+          style={{ marginTop: 10 }}
         />
         <AppButton
-          title="Verify last purchase"
-          variant="secondary"
-          onPress={verifyPayment}
-          disabled={processing || !isWorkspaceOwner}
-          style={{ marginTop: 10 }}
+          title="Manage subscription"
+          variant="ghost"
+          onPress={handleShowCustomerCenter}
+          disabled={processing}
+          style={{ marginTop: 6 }}
         />
       </Card>
 
-      {/* Addon Selection Modal */}
+      <Card>
+        <AppButton
+          title="Refresh"
+          variant="secondary"
+          onPress={async () => {
+            setLoading(true);
+            try {
+              await refreshBilling();
+            } catch {
+              // ignore
+            }
+            setLoading(false);
+          }}
+        />
+        {!isWorkspaceOwner && (
+          <AppButton
+            title="Notify workspace owner"
+            variant="secondary"
+            onPress={notifyOwner}
+            disabled={processing}
+            style={{ marginTop: 8 }}
+          />
+        )}
+      </Card>
+
       {showAddonModal && (
         <View style={[styles.modal, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-          <View
-            style={[
-              styles.modalContent,
-              { backgroundColor: theme.colors.background },
-            ]}
-          >
+          <View style={[styles.modalContent, { backgroundColor: theme.colors.background }]}>
             <View style={styles.modalHeader}>
-              <Text
-                style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}
-              >
-                Add-ons for your Pro plan
-              </Text>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>Add-ons for your Pro plan</Text>
               <TouchableOpacity onPress={() => setShowAddonModal(false)}>
-                <MaterialIcons
-                  name="close"
-                  size={24}
-                  color={theme.colors.textPrimary}
-                />
+                <MaterialIcons name="close" size={24} color={theme.colors.textPrimary} />
               </TouchableOpacity>
             </View>
 
             <ScrollView contentContainerStyle={{ padding: 16 }}>
-              <Text
-                style={[
-                  styles.meta,
-                  { color: theme.colors.textSecondary, marginBottom: 16 },
-                ]}
-              >
+              <Text style={[styles.meta, { color: theme.colors.textSecondary, marginBottom: 16 }]}>
                 Select the add-ons you'd like to purchase. Each add-on is a separate charge.
               </Text>
 
               {[
                 { key: 'workspaceSlot', label: 'Extra workspace slot', unit: 1500 },
                 { key: 'staffSeat', label: 'Extra staff seat', unit: 500 },
-                {
-                  key: 'whatsappBundle',
-                  label: 'WhatsApp bundle (100 msgs)',
-                  unit: 2000,
-                },
+                { key: 'whatsappBundle', label: 'WhatsApp bundle (100 msgs)', unit: 2000 },
               ].map((addon) => {
-                const price = applyPlayMarkup(
-                  billingCycle === 'yearly'
-                    ? Math.round(addon.unit * 12 * 0.8)
-                    : addon.unit,
-                );
+                const price = billingCycle === 'yearly' ? Math.round(addon.unit * 12 * 0.8) : addon.unit;
                 const isSelected = selectedAddons[addon.key];
                 return (
                   <TouchableOpacity
@@ -967,41 +559,22 @@ export default function SubscriptionScreen({ navigation }) {
                     style={[
                       styles.addonCheckbox,
                       {
-                        borderColor: isSelected
-                          ? theme.colors.primary
-                          : theme.colors.border,
-                        backgroundColor: isSelected
-                          ? `${theme.colors.primary}15`
-                          : 'transparent',
+                        borderColor: isSelected ? theme.colors.primary : theme.colors.border,
+                        backgroundColor: isSelected ? `${theme.colors.primary}15` : 'transparent',
                       },
                     ]}
                     onPress={() => toggleAddon(addon.key)}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text
-                        style={[
-                          styles.meta,
-                          { color: theme.colors.textPrimary, fontWeight: '600' },
-                        ]}
-                      >
-                        {addon.label}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.meta,
-                          { color: theme.colors.textSecondary },
-                        ]}
-                      >
-                        NGN {price.toLocaleString()} /{' '}
-                        {billingCycle === 'yearly' ? 'year' : 'month'}
+                      <Text style={[styles.meta, { color: theme.colors.textPrimary, fontWeight: '600' }]}>{addon.label}</Text>
+                      <Text style={[styles.meta, { color: theme.colors.textSecondary }]}>
+                        NGN {price.toLocaleString()} / {billingCycle === 'yearly' ? 'year' : 'month'}
                       </Text>
                     </View>
                     <MaterialIcons
                       name={isSelected ? 'check-circle' : 'radio-button-unchecked'}
                       size={24}
-                      color={
-                        isSelected ? theme.colors.primary : theme.colors.border
-                      }
+                      color={isSelected ? theme.colors.primary : theme.colors.border}
                     />
                   </TouchableOpacity>
                 );
@@ -1012,10 +585,7 @@ export default function SubscriptionScreen({ navigation }) {
                   title={processingAddon ? 'Purchasing...' : 'Continue with selected'}
                   onPress={startAddonCheckout}
                   loading={processingAddon}
-                  disabled={
-                    processingAddon ||
-                    !Object.values(selectedAddons).some((v) => v)
-                  }
+                  disabled={processingAddon || !Object.values(selectedAddons).some((v) => v)}
                 />
                 <AppButton
                   title="Skip add-ons"
@@ -1036,12 +606,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   onlineRequiredText: { fontSize: 14, lineHeight: 22, marginTop: 10 },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
   meta: { fontSize: 13, marginBottom: 4 },
   planItem: {
@@ -1054,25 +619,8 @@ const styles = StyleSheet.create({
   },
   planTitle: { fontSize: 14, fontWeight: '700' },
   planPrice: { fontSize: 12 },
-  cycleSwitcher: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 10,
-  },
-  cycleChip: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  addonRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  counter: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  counterValue: {
-    minWidth: 24,
-    textAlign: 'center',
-    fontSize: 15,
-    fontWeight: '700',
-  },
+  cycleSwitcher: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  cycleChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
   total: { fontSize: 18, fontWeight: '800', marginBottom: 10 },
   modal: {
     position: 'absolute',
@@ -1082,11 +630,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'flex-end',
   },
-  modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '85%',
-  },
+  modalContent: { borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85%' },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1095,12 +639,5 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 8,
   },
-  addonCheckbox: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  addonCheckbox: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 12, flexDirection: 'row', alignItems: 'center' },
 });

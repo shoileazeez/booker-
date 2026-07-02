@@ -12,6 +12,8 @@ import DebtScreen from '../screens/DebtScreen';
 import ReportsScreen from '../screens/ReportsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import SubscriptionScreen from '../screens/billing/SubscriptionScreen';
+import PaywallScreen from '../screens/billing/PaywallScreen';
+import CustomerCenterScreen from '../screens/billing/CustomerCenterScreen';
 import RecordSaleScreen from '../screens/RecordSaleScreen';
 import RecordExpenseScreen from '../screens/RecordExpenseScreen';
 import RecordDebtScreen from '../screens/RecordDebtScreen';
@@ -145,6 +147,8 @@ export default function MainTabs() {
       <Stack.Screen name="AddCustomerScreen" component={require('../screens/AddCustomerScreen').default} options={{ presentation: 'modal', title: 'Add Customer' }} />
       <Stack.Screen name="EditCustomerScreen" component={require('../screens/EditCustomerScreen').default} options={{ presentation: 'modal', title: 'Edit Customer' }} />
       <Stack.Screen name="Subscription" component={SubscriptionScreen} options={{ presentation: 'modal' }} />
+      <Stack.Screen name="Paywall" component={PaywallScreen} options={{ presentation: 'modal' }} />
+      <Stack.Screen name="CustomerCenter" component={CustomerCenterScreen} options={{ presentation: 'modal' }} />
     </Stack.Navigator>
   );
 }
