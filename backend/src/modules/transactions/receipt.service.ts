@@ -8,18 +8,18 @@ import { Transaction } from './entities/transaction.entity';
 export class ReceiptService {
   private s3: S3;
   private bucket: string;
-  private region: string;
-  private endpoint: string;
+  private publicUrl: string;
 
   constructor(private configService: ConfigService) {
-    this.region = this.configService.get<string>('DO_SPACE_REGION') || '';
-    this.bucket = this.configService.get<string>('DO_SPACE_BUCKET') || '';
-    this.endpoint = this.configService.get<string>('DO_SPACE_ENDPOINT') || '';
+    const accountId = this.configService.get<string>('R2_ACCOUNT_ID') || '';
+    this.bucket = this.configService.get<string>('R2_BUCKET_NAME') || '';
+    this.publicUrl = this.configService.get<string>('R2_PUBLIC_URL') || '';
+
     this.s3 = new S3({
-      endpoint: this.endpoint,
-      region: this.region,
-      accessKeyId: this.configService.get<string>('DO_SPACE_KEY') || '',
-      secretAccessKey: this.configService.get<string>('DO_SPACE_SECRET') || '',
+      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      region: 'auto',
+      accessKeyId: this.configService.get<string>('R2_ACCESS_KEY_ID') || '',
+      secretAccessKey: this.configService.get<string>('R2_SECRET_ACCESS_KEY') || '',
       signatureVersion: 'v4',
     });
   }
@@ -270,11 +270,10 @@ export class ReceiptService {
         Bucket: this.bucket,
         Key: key,
         Body: pdfBuffer,
-        ACL: 'public-read',
         ContentType: 'application/pdf',
       })
       .promise();
 
-    return `https://${this.bucket}.${this.endpoint.replace('https://', '')}/${key}`;
+    return `${this.publicUrl}/${key}`;
   }
 }
