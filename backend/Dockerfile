@@ -4,10 +4,10 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts && npm rebuild
+RUN npm ci --ignore-scripts
 
 COPY . .
-RUN npm run build
+RUN npm rebuild && npm run build
 
 # prune dev dependencies
 RUN npm prune --production
